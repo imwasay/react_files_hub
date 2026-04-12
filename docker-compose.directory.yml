@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ./frontend/dist:/app/frontend/dist:ro
+      - /etc/letsencrypt:/certs:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chromadb:
+    image: chromadb/chroma:latest
+    volumes:
+      - ./data/vectors:/chroma/chroma
+    ports:
+      - "127.0.0.1:8010:8000"
+    restart: unless-stopped
+
+volumes:
+  data:

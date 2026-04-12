@@ -1,0 +1,32 @@
+# runtime data — never commit
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# secrets
+.env
+*.pem
+*.key
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# node
+node_modules/
+frontend/dist/
+
+# docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/

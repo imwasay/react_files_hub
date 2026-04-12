@@ -1,0 +1,17 @@
+[Unit]
+Description=ntrides edge service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/ntrides-edge
+EnvironmentFile=/opt/ntrides-edge/.env
+ExecStart=/opt/ntrides-edge/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8080 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

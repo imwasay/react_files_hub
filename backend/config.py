@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import EmailStr
 from typing import Literal, Optional
 from functools import lru_cache
 
@@ -29,6 +30,11 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     serve_react: bool = True
     react_static_path: str = "/app/frontend/dist"
+
+    # admin bootstrap
+    admin_username: Optional[str] = None
+    admin_email: Optional[EmailStr] = None
+    admin_password: Optional[str] = None
 
     # storage mode
     node_id: Optional[str] = None

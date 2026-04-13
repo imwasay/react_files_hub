@@ -15,7 +15,7 @@ export default function Admin() {
   const user = useAuthStore(s => s.user)
   const navigate = useNavigate()
 
-  if (user?.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && user.role !== 'owner')) {
     return <div style={{ padding: 32, fontSize: 14 }}>Admin access required.</div>
   }
 

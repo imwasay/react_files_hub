@@ -33,7 +33,7 @@ export default function Login() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <form onSubmit={handleSubmit} style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 8 }}>ntrides</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 8 }}>Files Share Hub</h1>
         {error && <p style={{ color: 'red', fontSize: 14 }}>{error}</p>}
         <input
           type="email"

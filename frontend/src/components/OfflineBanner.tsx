@@ -8,14 +8,16 @@ export default function OfflineBanner() {
     const check = async () => {
       try {
         const r = await api.get('/health')
-        // vps-edge returns dir_node_online field
+        // directory node returns { status: 'ok' } with no dir_node_online field
+        // vps-edge returns { dir_node_online: bool }
+        // only show banner when dir_node_online is explicitly false
+        // undefined (directory node responding directly) means we are online
         if (r.data.dir_node_online === false) {
           setOffline(true)
         } else {
           setOffline(false)
         }
       } catch {
-        // if health itself fails, we're definitely offline
         setOffline(true)
       }
     }

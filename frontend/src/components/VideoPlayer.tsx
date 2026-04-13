@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import React, { useEffect, useRef, useState } from 'react'
 
 interface Props {

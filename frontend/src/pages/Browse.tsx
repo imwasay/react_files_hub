@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom'
 import { listFiles } from '../api/files'
 import FileCard from '../components/FileCard'
 import NodeBadge from '../components/NodeBadge'
+import { useAuthStore } from '../store/auth'
 
 export default function Browse() {
   const [path, setPath] = useState('')
   const [fileType, setFileType] = useState('')
   const [page, setPage] = useState(1)
   const navigate = useNavigate()
+  const user = useAuthStore(s => s.user)
 
   const { data, isLoading } = useQuery({
     queryKey: ['files', path, fileType, page],
@@ -23,6 +25,11 @@ export default function Browse() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 500 }}>Files</h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          {(user?.role === 'admin' || user?.role === 'owner') && (
+            <button onClick={() => navigate('/admin')} style={{ fontSize: 13, padding: '4px 12px', borderRadius: 6, border: '1px solid #ccc', cursor: 'pointer' }}>
+              Admin
+            </button>
+          )}
           <select
             value={fileType}
             onChange={e => { setFileType(e.target.value); setPage(1) }}

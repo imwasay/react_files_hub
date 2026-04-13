@@ -4,19 +4,50 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import os
+import uuid
 
+from passlib.context import CryptContext
+from sqlalchemy.exc import IntegrityError
 from config import get_settings
-from database import init_db
+from database import init_db, get_db
+from models.user import User
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 settings = get_settings()
+pwd = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
+admin_pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+
+def bootstrap_admin_user():
+    if not (settings.admin_username and settings.admin_email and settings.admin_password):
+        return
+
+    try:
+        with get_db() as db:
+            existing = db.query(User).filter(User.email == settings.admin_email).first()
+            if existing:
+                return
+
+            user = User(
+                id=str(uuid.uuid4()),
+                username=settings.admin_username,
+                email=settings.admin_email,
+                password_hash=admin_pwd.hash(settings.admin_password),
+                role="owner",
+            )
+            db.add(user)
+            db.flush()
+        logger.info("Created admin user %s", settings.admin_email)
+    except IntegrityError:
+        logger.info("Admin user %s already exists; skipping bootstrap.", settings.admin_email)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting ntrides node — mode: %s", settings.node_mode)
+    logger.info("Starting files_hub node — mode: %s", settings.node_mode)
     init_db()
+    bootstrap_admin_user()
 
     if settings.is_storage:
         from agent.heartbeat import start_heartbeat
@@ -28,11 +59,11 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down ntrides node")
+    logger.info("Shutting down files_hub node")
 
 
 app = FastAPI(
-    title="ntrides",
+    title="files_hub",
     version=settings.node_version,
     docs_url="/api/docs" if settings.is_directory else None,
     redoc_url=None,

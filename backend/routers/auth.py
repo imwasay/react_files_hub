@@ -13,7 +13,7 @@ from middleware.auth_middleware import get_current_user
 
 router = APIRouter()
 settings = get_settings()
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
 
 
 class RegisterRequest(BaseModel):

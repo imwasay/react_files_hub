@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     node_public_ipv4: Optional[str] = None
     node_public_ipv6: Optional[str] = None
     node_wg_ip: Optional[str] = None
+    self_node_id: Optional[str] = None        # identity for self-node bootstrap
+    self_node_subdomain: Optional[str] = None  # public subdomain for self-node
     db_path: str = "/data/registry.db"
     vector_store_path: str = "/data/vectors"
     vector_store_backend: Literal["chroma", "qdrant", "pgvector"] = "chroma"

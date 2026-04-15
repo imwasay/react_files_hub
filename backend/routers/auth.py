@@ -13,7 +13,7 @@ from middleware.auth_middleware import get_current_user
 
 router = APIRouter()
 settings = get_settings()
-pwd = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
+pwd = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 class RegisterRequest(BaseModel):
@@ -46,7 +46,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db_dep)):
         username=body.username,
         email=body.email,
         password_hash=pwd.hash(body.password),
-        role="owner",
+        role="viewer",
     )
     db.add(user)
     return {"user_id": user.id, "username": user.username, "role": user.role}

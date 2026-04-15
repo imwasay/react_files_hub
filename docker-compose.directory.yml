@@ -8,8 +8,13 @@ services:
       - ./data:/data
       - ./frontend/dist:/app/frontend/dist:ro
       - /etc/letsencrypt:/certs:ro
+      # ── Optiplex physical drives (self-node mounts) ──────────────────────
+      - /mnt/WD2T:/mnt/WD2T:ro
+      - /mnt/Seagate500G:/mnt/Seagate500G:ro
+      - /mnt/WD1T/Downloads/iso:/mnt/WD1T/Downloads/iso:ro
+      - /mnt/WD2T/Studies:/mnt/WD2T/Studies  # read-write for Studies
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]

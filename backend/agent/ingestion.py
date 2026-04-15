@@ -58,9 +58,36 @@ def _embed_chunks(chunks: List[str]) -> List[List[float]]:
     return model.encode(chunks).tolist()
 
 
-async def _push_vectors(file_id: str, chunks: List[str], embeddings: List[List[float]]):
+async def _get_local_or_dir_url() -> str:
+    """Return the base URL for the ingest endpoints.
+
+    On the Directory Node (self), hit localhost directly rather than going via
+    the external contact list (which may not be reachable from inside Docker).
+    """
+    if settings.is_directory:
+        return "http://localhost:8000"
+    # Storage node — find the directory node
     from agent.heartbeat import _get_dir_url
-    url = await _get_dir_url()
+    return await _get_dir_url()
+
+
+def _make_self_federation_token() -> str:
+    """Generate a short-lived federation JWT for the self-node calling its own endpoints."""
+    from jose import jwt as _jwt
+    from datetime import datetime, timedelta
+    node_id = settings.self_node_id or settings.node_id or "self"
+    exp = datetime.utcnow() + timedelta(hours=1)
+    return _jwt.encode({"node_id": node_id, "exp": exp}, settings.jwt_secret, algorithm="HS256")
+
+
+def _get_federation_token() -> str:
+    if settings.is_directory and settings.self_node_id:
+        return _make_self_federation_token()
+    return FEDERATION_TOKEN
+
+
+async def _push_vectors(file_id: str, chunks: List[str], embeddings: List[List[float]]):
+    url = await _get_local_or_dir_url()
     payload = {
         "file_id": file_id,
         "chunks": [
@@ -72,18 +99,17 @@ async def _push_vectors(file_id: str, chunks: List[str], embeddings: List[List[f
         await client.post(
             f"{url}/api/v1/ingest/push-vectors",
             json=payload,
-            headers={"X-Federation-Token": FEDERATION_TOKEN},
+            headers={"X-Federation-Token": _get_federation_token()},
         )
 
 
 async def _report_status(file_id: str, status: str, reason: str = ""):
-    from agent.heartbeat import _get_dir_url
-    url = await _get_dir_url()
+    url = await _get_local_or_dir_url()
     async with httpx.AsyncClient(timeout=10) as client:
         await client.patch(
             f"{url}/api/v1/ingest/status",
             json={"file_id": file_id, "status": status, "reason": reason},
-            headers={"X-Federation-Token": FEDERATION_TOKEN},
+            headers={"X-Federation-Token": _get_federation_token()},
         )
 
 

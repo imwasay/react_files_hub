@@ -9,16 +9,20 @@ type User = {
 
 type AuthState = {
   user: User
+  hydrated: boolean   // true once the initial getMe() attempt has completed
   setUser: (user: User) => void
+  setHydrated: () => void
   logout: () => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
+  hydrated: false,
   setUser: (user) => set({ user }),
-  logout: () => set(() => {
+  setHydrated: () => set({ hydrated: true }),
+  logout: () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
-    return { user: null }
-  }),
+    set({ user: null })
+  },
 }))

@@ -15,19 +15,50 @@ const qc = new QueryClient()
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = useAuthStore(s => s.user)
+  const hydrated = useAuthStore(s => s.hydrated)
+
+  // Don't make any routing decision until we've tried to restore the session.
+  // Without this, React renders with user=null before getMe() resolves and
+  // immediately redirects to /login — causing the "logout on refresh" bug.
+  if (!hydrated) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', color: '#aaa', fontSize: 14,
+      }}>
+        Loading…
+      </div>
+    )
+  }
+
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
 export default function App() {
   const setUser = useAuthStore(s => s.setUser)
+  const setHydrated = useAuthStore(s => s.setHydrated)
 
   useEffect(() => {
     const token = localStorage.getItem('access_token')
     if (token) {
-      getMe().then(setUser).catch(() => {})
+      getMe()
+        .then(user => {
+          setUser(user)
+          setHydrated()
+        })
+        .catch(() => {
+          // Token expired or invalid — clear it and mark hydrated so
+          // RequireAuth can redirect to /login cleanly.
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          setHydrated()
+        })
+    } else {
+      // No token at all — nothing to restore, immediately unblock routing.
+      setHydrated()
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <QueryClientProvider client={qc}>

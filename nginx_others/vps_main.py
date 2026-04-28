@@ -1,3 +1,13 @@
+"""
+VPS Edge Proxy & Cache Node
+---------------------------
+This independent script runs behind Nginx on a public VPS.
+When the main home server is ONLINE, this script detects it and returns HTTP 421.
+The React client intercepts the 421 and tells the user to refresh/wait for DNS to route to the main server.
+When the main server goes OFFLINE, DNS round-robin falls back to this VPS.
+This script then serves a cached read-only file list, allowing streaming to continue from storage nodes.
+"""
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import httpx
@@ -10,9 +20,7 @@ from pydantic_settings import BaseSettings
 
 
 class EdgeSettings(BaseSettings):
-    dir_node_wg_ip: str = "10.72.0.1"
-    dir_node_ipv6: str = ""
-    dir_node_ipv4: str = ""
+    dir_node_ip: str = "10.72.0.1"
     registry_cache_path: str = "/data/registry_cache.json"
     registry_cache_ttl: int = 120
 
@@ -34,11 +42,7 @@ _dir_online: bool = False
 
 async def _refresh_cache():
     global _cache, _cache_updated_at, _dir_online
-    contacts = [settings.dir_node_wg_ip]
-    if settings.dir_node_ipv6:
-        contacts.append(f"[{settings.dir_node_ipv6}]")
-    if settings.dir_node_ipv4:
-        contacts.append(settings.dir_node_ipv4)
+    contacts = [h.strip() for h in settings.dir_node_ip.split(",") if h.strip()]
 
     for contact in contacts:
         try:
@@ -92,14 +96,14 @@ def health():
 def cached_files():
     """Serve stale file list when dir node is offline."""
     if _dir_online:
-        return JSONResponse(status_code=502, content={"error": "use_dir_node"})
+        return JSONResponse(status_code=421, content={"error": "main_online"})
     return {"files": _cache.get("files", []), "cached": True, "read_only": True}
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 def fallback(path: str):
     if _dir_online:
-        return JSONResponse(status_code=502, content={"error": "use_dir_node"})
+        return JSONResponse(status_code=421, content={"error": "main_online"})
     return JSONResponse(
         status_code=503,
         content={"error": "directory_node_offline", "read_only": True},

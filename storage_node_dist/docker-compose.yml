@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      # - FEDERATION_TOKEN=${FEDERATION_TOKEN}
+      - FEDERATION_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub2RlX2lkIjoiaGQiLCJ0eXBlIjoiZmVkZXJhdGlvbiIsImV4cCI6MTgwODcyMzQ2NX0.uRINbAO_ZDfkuwMkE_gTIYxF3pIJbZpd7N_0CfFVzMo
+    volumes:
+      - ./data:/data
+      - ./frontend/dist:/app/frontend/dist:ro
+      - /etc/letsencrypt:/certs:ro
+      # mount shared paths — add your real paths here
+      # linux example:
+      - /home/${USER}/:/mnt/share1:ro
+      # windows example (set HOST_OS=windows in .env):
+      # - C:/Users/friend/SharedFiles:/mnt/share1:ro
+    ports:
+      - "8000:8000"
+      - "8001:8001"   # internal file serving port (WG only)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

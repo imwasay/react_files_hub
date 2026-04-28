@@ -18,32 +18,24 @@ The storage node:
 - Watches its own local disk and pushes **metadata only** to the directory node
 - Never uploads the actual files — bytes stay on the friend's machine
 - Sends a heartbeat every 60s so the directory node knows it's reachable
-- Serves files directly via WireGuard IP when both machines are on the same VPN
+- Serves files directly via Node IP (when machines share a VPN or local network) or IPv6
 
 ---
 
-## Step 1 — Connect to the WireGuard VPN
+## Step 1 — Ensure Network Connectivity
 
-The friend's machine must join the WireGuard mesh so the directory node can reach it. If you don't already have WireGuard set up:
+The friend's machine must be able to reach the directory node. This can be achieved through:
+1. **A VPN/Mesh Network (Recommended)**: Such as Tailscale, WireGuard, or ZeroTier.
+2. **Dual-Stack (IPv6)**: If both machines have globally routable IPv6 addresses.
+3. **Local Area Network (LAN)**: If both machines are on the same local network.
 
+*Motto: "As long as connectivity exists between us, the system will work."*
+
+Verify connectivity:
 ```bash
-# On the friend's machine (Ubuntu/Debian)
-sudo apt install wireguard
-
-# Ask the Optiplex admin for:
-#   - A wg-quick config file (wg0.conf)
-#   - Their public key
-#   - An available IP in 10.72.0.0/24 (e.g. 10.72.0.3)
-
-sudo cp wg0.conf /etc/wireguard/wg0.conf
-sudo wg-quick up wg0
-sudo systemctl enable wg-quick@wg0  # persist across reboots
-
-# Test connectivity
-ping 10.72.0.1   # should reach the Optiplex
+# Test connectivity to the directory node
+ping <directory_node_ip>
 ```
-
-> **Tip:** Use `wg show` to verify the connection is active.
 
 ---
 
@@ -54,8 +46,7 @@ On the Optiplex, go to **Admin → Nodes → Register node**:
 | Field | Example value |
 |---|---|
 | Node ID | `alice-home` |
-| Subdomain | `alice.ntrides.com.au` (optional) |
-| WireGuard IP | `10.72.0.3` |
+| Node IP | `10.72.0.3, 2001:db8::3, alice.example.com` (comma-separated routing options) |
 | Owner username | `alice` (must exist in Users tab first) |
 | OS | Linux |
 
@@ -95,14 +86,14 @@ Edit `.env` and fill in:
 NODE_MODE=storage
 NODE_ID=alice-home                      # must match what you registered in Step 2
 
-DIR_NODE_WG_IP=10.72.0.1               # Optiplex's WireGuard IP
+DIR_NODE_IP=10.72.0.1, example.com   # Optiplex's contact routes
 
 FEDERATION_TOKEN=<paste token from Step 2>
 JWT_SECRET=<same JWT_SECRET as the Optiplex>
 
 MAPPED_ROOTS=/mnt/data                  # the path(s) you want to share
 
-NODE_WG_IP=10.72.0.3                   # this machine's WireGuard IP
+NODE_IP=10.72.0.3, 2001:db8::3       # this machine's reachable routes
 ```
 
 > **Important:** `JWT_SECRET` must be **identical** to the value in the Optiplex's `.env`.
@@ -169,11 +160,11 @@ Go to **Admin → Access Control**, select the root, select the user, and click 
 
 | Symptom | Fix |
 |---|---|
-| Node stays `offline` | Check WireGuard: `ping 10.72.0.1` from the storage machine |
+| Node stays `offline` | Check connectivity: `ping <directory_node_ip>` from the storage machine |
 | "No mapped root found" in sync log | Add the root in Admin → Mapped Roots before starting the watcher |
 | Files not appearing | Check that the drive path is mounted in `docker-compose.storage.yml` |
 | Federation token rejected | Verify `JWT_SECRET` matches the Optiplex exactly |
-| Can't stream a file | Make sure the WireGuard tunnel is active; the directory proxies if direct fails |
+| Can't stream a file | Make sure the tunnel/IPv6 is active; the directory proxies if direct fails |
 
 ---
 

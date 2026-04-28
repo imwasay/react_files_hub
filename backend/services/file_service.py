@@ -45,22 +45,7 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
             "reason": f"Node {node.node_id} is offline and no cache copy exists",
         }
 
-    token = _make_serve_token(file.id, user.id)
-
-    # if node has an IPv6 address, suggest direct — client will try with timeout
-    if node.ipv6 and not settings.force_ipv4:
-        return {
-            "strategy": "direct",
-            "source": "origin",
-            "direct": {
-                "url": f"https://{node.subdomain}/serve/{token}",
-                "token": token,
-                "expires_at": (datetime.utcnow() + timedelta(minutes=5)).isoformat(),
-            },
-            "proxy_fallback": f"/api/v1/files/{file.id}/stream",
-        }
-
-    # IPv4 only — proxy through directory node
+    # Always proxy through directory node to avoid SSL errors with direct IP connections
     return {
         "strategy": "proxy",
         "source": "origin",
@@ -89,17 +74,33 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
     if not serve_node:
         raise HTTPException(status_code=503, detail="File unavailable — no online node")
 
-    # build internal WG URL to fetch from node agent
-    base_url = f"http://{serve_node.wg_ip}:8001/internal/files"
+    ips = [ip.strip() for ip in serve_node.node_ip.split(",") if ip.strip()] if serve_node.node_ip else []
+    if not ips:
+        raise HTTPException(status_code=503, detail="Node has no configured IP")
+
     headers = {"X-Federation-Token": _make_internal_token(serve_node.node_id)}
     if range_header:
         headers["Range"] = range_header
 
     async def _stream():
-        async with httpx.AsyncClient() as client:
-            async with client.stream("GET", f"{base_url}?path={serve_path}", headers=headers) as r:
-                async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
-                    yield chunk
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        for ip in ips:
+            base_url = f"http://{ip}:8001/internal/files"
+            try:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream("GET", f"{base_url}?path={serve_path}", headers=headers, timeout=5.0) as r:
+                        r.raise_for_status()
+                        async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
+                            yield chunk
+                return  # Stream completed successfully
+            except Exception as e:
+                logger.warning("Failed to stream from node %s via IP %s: %s", serve_node.node_id, ip, e)
+                continue
+        
+        # If we exit the loop, all IPs failed
+        raise HTTPException(status_code=502, detail="Failed to reach storage node on any configured IP")
 
     status_code = 206 if range_header else 200
     return StreamingResponse(

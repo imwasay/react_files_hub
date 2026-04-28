@@ -33,9 +33,7 @@ async def _send_heartbeat():
                 f"{url}/api/v1/nodes/heartbeat",
                 json={
                     "node_id": settings.node_id,
-                    "wg_ip": settings.node_wg_ip,
-                    "ipv6": settings.node_public_ipv6_storage,
-                    "ipv4": None,
+                    "node_ip": settings.node_ip,
                     "cache_used_bytes": cache_used,
                     "status": "online",
                 },

@@ -1,15 +1,22 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { search, askLLM } from '../api/shares'
-import FileCard from '../components/FileCard'
 
 export default function Search() {
-  const [q, setQ] = useState('')
-  const [submitted, setSubmitted] = useState('')
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialQ = searchParams.get('q') || ''
+  const [q, setQ] = useState(initialQ)
+  const [submitted, setSubmitted] = useState(initialQ)
   const [mode, setMode] = useState<'semantic' | 'filename'>('semantic')
-  const [askMode, setAskMode] = useState(false)
   const [askAnswer, setAskAnswer] = useState<any>(null)
   const [asking, setAsking] = useState(false)
+
+  // Auto-submit from URL param
+  useEffect(() => {
+    if (initialQ) setSubmitted(initialQ)
+  }, [initialQ])
 
   const { data, isLoading } = useQuery({
     queryKey: ['search', submitted, mode],
@@ -35,26 +42,59 @@ export default function Search() {
     }
   }
 
-  return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 500, marginBottom: 16 }}>Search</h1>
+  const handleResultClick = (r: any) => {
+    if (r.file_type === 'video' || r.file_type === 'audio') {
+      navigate(`/play/${r.file_id}`)
+    } else if (r.logical_path) {
+      const parts = r.logical_path.split('/')
+      parts.pop()
+      navigate(`/browse/${parts.join('/')}`)
+    }
+  }
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="Search your files..."
-          style={{ flex: 1, padding: '8px 12px', fontSize: 14, borderRadius: 6, border: '1px solid #ccc' }}
-        />
+  return (
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <h1 style={{
+        fontSize: '1.125rem',
+        fontWeight: 700,
+        marginBottom: '1rem',
+        color: 'var(--text-heading)',
+      }}>
+        Search
+      </h1>
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem',
+          background: 'var(--surface-0)',
+          border: '1px solid var(--border-medium)',
+          borderRadius: 'var(--radius-md)',
+          padding: '0.25rem 0.75rem',
+        }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>🔍</span>
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search your files..."
+            autoFocus
+            style={{
+              flex: 1, border: 'none', background: 'transparent',
+              color: 'var(--text-primary)', fontSize: '0.875rem',
+              outline: 'none', fontFamily: 'var(--font-sans)',
+              padding: '0.375rem 0',
+            }}
+          />
+        </div>
         <select
           value={mode}
           onChange={e => setMode(e.target.value as any)}
-          style={{ fontSize: 13, padding: '4px 8px', borderRadius: 6, border: '1px solid #ccc' }}
+          className="input"
+          style={{ fontSize: '0.8125rem' }}
         >
           <option value="semantic">Semantic</option>
           <option value="filename">Filename</option>
         </select>
-        <button type="submit" style={{ padding: '8px 16px', fontSize: 14, borderRadius: 6, background: '#534AB7', color: '#fff', border: 'none', cursor: 'pointer' }}>
+        <button type="submit" className="btn btn-primary">
           Search
         </button>
       </form>
@@ -63,36 +103,91 @@ export default function Search() {
         <button
           onClick={handleAsk}
           disabled={asking}
-          style={{ marginBottom: 16, fontSize: 13, padding: '6px 14px', borderRadius: 6, border: '1px solid #534AB7', color: '#534AB7', background: 'transparent', cursor: 'pointer' }}
+          className="btn btn-ghost"
+          style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
         >
-          {asking ? 'Asking...' : 'Ask AI about these files'}
+          {asking ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              <span style={{
+                width: 14, height: 14,
+                border: '2px solid var(--border-medium)',
+                borderTop: '2px solid var(--accent-primary)',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                display: 'inline-block',
+              }} />
+              Asking...
+            </span>
+          ) : (
+            '✨ Ask AI about these files'
+          )}
         </button>
       )}
 
       {askAnswer && (
-        <div style={{ marginBottom: 20, padding: 16, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 14 }}>
-          <p style={{ fontWeight: 500, marginBottom: 8 }}>AI Answer</p>
-          <p style={{ lineHeight: 1.6 }}>{askAnswer.answer}</p>
+        <div className="glass-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+          <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>
+            AI Answer
+          </div>
+          <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+            {askAnswer.answer}
+          </div>
           {askAnswer.sources?.length > 0 && (
-            <p style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+            <div style={{ marginTop: '0.5rem', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               Sources: {askAnswer.sources.map((s: any) => s.filename).join(', ')}
-            </p>
+            </div>
           )}
         </div>
       )}
 
-      {isLoading && <p style={{ fontSize: 14, color: '#888' }}>Searching...</p>}
+      {isLoading && (
+        <div style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' }}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 64, borderRadius: 'var(--radius-md)' }} />
+          ))}
+        </div>
+      )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {data?.results?.map((r: any) => (
-          <div key={r.file_id} style={{ padding: 12, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 14 }}>
-            <div style={{ fontWeight: 500 }}>{r.filename}</div>
-            <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{r.logical_path}</div>
-            {r.snippet && <div style={{ marginTop: 6, fontSize: 13, color: '#555', fontStyle: 'italic' }}>"{r.snippet}..."</div>}
+          <div
+            key={r.file_id}
+            onClick={() => handleResultClick(r)}
+            className="glass-card"
+            style={{
+              padding: '0.75rem 1rem',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-heading)',
+              marginBottom: '0.125rem',
+            }}>
+              {r.filename}
+            </div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+              {r.logical_path}
+            </div>
+            {r.snippet && (
+              <div style={{
+                marginTop: '0.375rem',
+                fontSize: '0.8125rem',
+                color: 'var(--text-secondary)',
+                fontStyle: 'italic',
+              }}>
+                "{r.snippet}..."
+              </div>
+            )}
           </div>
         ))}
         {submitted && !isLoading && data?.results?.length === 0 && (
-          <p style={{ fontSize: 14, color: '#888' }}>No results found.</p>
+          <div style={{
+            textAlign: 'center', padding: '3rem',
+            color: 'var(--text-muted)', fontSize: '0.875rem',
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🔍</div>
+            No results found for "{submitted}"
+          </div>
         )}
       </div>
     </div>

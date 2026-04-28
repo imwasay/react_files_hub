@@ -1,5 +1,12 @@
 import api from './client'
 
+function withToken(url: string): string {
+  const token = localStorage.getItem('access_token')
+  if (!token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}token=${token}`
+}
+
 export const listFiles = (params?: {
   root_id?: string
   node_id?: string
@@ -38,9 +45,9 @@ export const resolveStreamUrl = async (file_id: string): Promise<string> => {
       // fall through to proxy
     }
     return strategy.proxy_fallback
-      ? `/api/v1/files/${file_id}/stream`
+      ? withToken(`/api/v1/files/${file_id}/stream`)
       : directUrl
   }
 
-  return `/api/v1/files/${file_id}/stream`
+  return withToken(`/api/v1/files/${file_id}/stream`)
 }

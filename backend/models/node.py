@@ -9,10 +9,7 @@ class Node(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     node_id = Column(String, unique=True, nullable=False, index=True)
-    subdomain = Column(String, unique=True)
-    wg_ip = Column(String)
-    ipv6 = Column(String)
-    ipv4 = Column(String)
+    node_ip = Column(String)
     host_os = Column(String, default="linux")
     status = Column(String, default="offline")  # online | offline | degraded
     last_seen = Column(DateTime)

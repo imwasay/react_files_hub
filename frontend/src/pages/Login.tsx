@@ -8,6 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [shake, setShake] = useState(false)
   const navigate = useNavigate()
   const setUser = useAuthStore(s => s.setUser)
 
@@ -25,40 +26,151 @@ export default function Login() {
       navigate('/browse')
     } catch {
       setError('Invalid email or password')
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <form onSubmit={handleSubmit} style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 8 }}>Files Share Hub</h1>
-        {error && <p style={{ color: 'red', fontSize: 14 }}>{error}</p>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          style={{ padding: '8px 12px', fontSize: 14, borderRadius: 6, border: '1px solid #ccc' }}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          style={{ padding: '8px 12px', fontSize: 14, borderRadius: 6, border: '1px solid #ccc' }}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ padding: '10px', fontSize: 14, borderRadius: 6, background: '#534AB7', color: '#fff', border: 'none', cursor: 'pointer' }}
-        >
-          {loading ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+    }}>
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          background: 'rgba(255,255,255,0.03)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          padding: '2.5rem 2rem',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+          animation: shake ? 'shake 0.5s ease-out' : 'slideUp 0.5s var(--ease-out)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Accent bar */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+          background: 'var(--accent-gradient)',
+        }} />
+
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📁</div>
+          <h1 style={{
+            fontSize: '1.5rem',
+            fontWeight: 800,
+          }}>
+            <span className="accent-gradient-text">Files Hub</span>
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Sign in to access your files
+          </p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            padding: '0.625rem 0.875rem',
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 'var(--radius-md)',
+            color: '#f87171',
+            fontSize: '0.8125rem',
+            marginBottom: '1rem',
+            textAlign: 'center',
+          }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem', display: 'block' }}>
+              Email
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              className="input"
+              style={{ width: '100%', padding: '0.625rem 0.875rem' }}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.25rem', display: 'block' }}>
+              Password
+            </label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="input"
+              style={{ width: '100%', padding: '0.625rem 0.875rem' }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn btn-primary"
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              fontSize: '0.9375rem',
+              marginTop: '0.5rem',
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{
+                  width: 16, height: 16,
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTop: '2px solid white',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                  display: 'inline-block',
+                }} />
+                Signing in...
+              </span>
+            ) : (
+              'Sign in'
+            )}
+          </button>
+        </form>
+
+        <div style={{
+          textAlign: 'center', marginTop: '1.5rem',
+          fontSize: '0.75rem', color: 'var(--text-muted)',
+        }}>
+          ntrides.com.au · Files Hub
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+          20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+      `}</style>
     </div>
   )
 }

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { resolveShareToken } from '../api/shares'
 import VideoPlayer from '../components/VideoPlayer'
-import NodeBadge from '../components/NodeBadge'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
@@ -29,27 +28,47 @@ export default function Share() {
       .finally(() => setLoading(false))
   }, [token])
 
-  if (loading) return <div style={{ padding: 32, fontSize: 14, color: '#888' }}>Loading...</div>
+  if (loading) return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+      color: 'var(--text-muted)', fontSize: 14,
+    }}>
+      <div style={{
+        width: 36, height: 36,
+        border: '3px solid var(--border-subtle)',
+        borderTop: '3px solid var(--accent-primary)',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+      }} />
+    </div>
+  )
 
   if (error) return (
-    <div style={{ maxWidth: 480, margin: '80px auto', padding: '0 16px', textAlign: 'center' }}>
-      <div style={{ fontSize: 14, color: '#E24B4A', marginBottom: 16 }}>{error}</div>
-      <button onClick={() => navigate('/')} style={{ fontSize: 13, color: '#534AB7', background: 'none', border: 'none', cursor: 'pointer' }}>
-        Go home
-      </button>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+    }}>
+      <div className="glass" style={{ maxWidth: 480, padding: '2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
+        <div style={{ color: 'var(--danger)', fontSize: '0.9375rem', marginBottom: '1rem' }}>{error}</div>
+        <button onClick={() => navigate('/')} className="btn btn-ghost">Go home</button>
+      </div>
     </div>
   )
 
   if (data?.requires_auth) {
     return (
-      <div style={{ maxWidth: 480, margin: '80px auto', padding: '0 16px', textAlign: 'center' }}>
-        <div style={{ fontSize: 14, marginBottom: 16 }}>This file requires login to access.</div>
-        <button
-          onClick={() => navigate('/login')}
-          style={{ padding: '8px 20px', fontSize: 14, borderRadius: 6, background: '#534AB7', color: '#fff', border: 'none', cursor: 'pointer' }}
-        >
-          Sign in
-        </button>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+      }}>
+        <div className="glass" style={{ maxWidth: 480, padding: '2rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>
+            This file requires login to access.
+          </div>
+          <button onClick={() => navigate('/login')} className="btn btn-primary">Sign in</button>
+        </div>
       </div>
     )
   }
@@ -57,39 +76,47 @@ export default function Share() {
   const isPlayable = data?.file_type === 'video' || data?.file_type === 'audio'
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 16px' }}>
-      <div style={{ marginBottom: 4, fontSize: 11, color: '#888' }}>Shared via ntrides</div>
-      <h1 style={{ fontSize: 20, fontWeight: 500, marginBottom: 4 }}>{data?.filename}</h1>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, fontSize: 12, color: '#888' }}>
-        <span>{formatBytes(data?.size_bytes || 0)}</span>
-        <NodeBadge status={data?.node_status} />
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
+      padding: '2rem 1rem',
+    }}>
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ marginBottom: '0.25rem', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+          Shared via Files Hub
+        </div>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-heading)', marginBottom: '0.25rem' }}>
+          {data?.filename}
+        </h1>
+        <div style={{
+          display: 'flex', gap: '0.75rem', alignItems: 'center',
+          marginBottom: '1.25rem', fontSize: '0.75rem', color: 'var(--text-muted)',
+        }}>
+          <span>{formatBytes(data?.size_bytes || 0)}</span>
+          {data?.node_status && (
+            <span className={`badge badge-${data.node_status === 'online' ? 'online' : 'offline'}`}>
+              {data.node_status}
+            </span>
+          )}
+        </div>
 
-      {isPlayable ? (
-        <VideoPlayer
-          streamUrl={data.stream_url}
-          filename={data.filename}
-          mimeType={data.file_type === 'video' ? 'video/mp4' : 'audio/mpeg'}
-          isMediaLibrary={false}
-          fileId={data.file_id}
-        />
-      ) : (
-        <a
-          href={data?.stream_url}
-          download={data?.filename}
-          style={{
-            display: 'inline-block',
-            padding: '10px 20px',
-            fontSize: 14,
-            borderRadius: 6,
-            background: '#534AB7',
-            color: '#fff',
-            textDecoration: 'none',
-          }}
-        >
-          Download {data?.filename}
-        </a>
-      )}
+        {isPlayable ? (
+          <VideoPlayer
+            streamUrl={data.stream_url}
+            filename={data.filename}
+            mimeType={data.file_type === 'video' ? 'video/mp4' : 'audio/mpeg'}
+            fileId={data.file_id}
+          />
+        ) : (
+          <a
+            href={data?.stream_url}
+            download={data?.filename}
+            className="btn btn-primary"
+          >
+            ↓ Download {data?.filename}
+          </a>
+        )}
+      </div>
     </div>
   )
 }

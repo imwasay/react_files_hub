@@ -136,9 +136,6 @@ def get_file(
         "is_media_library": f.mapped_root.is_media_library,
         "node": {
             "node_id": f.node.node_id,
-            "subdomain": f.node.subdomain,
-            "ipv6": f.node.ipv6,
-            "ipv4": f.node.ipv4,
             "status": f.node.status,
         },
     }

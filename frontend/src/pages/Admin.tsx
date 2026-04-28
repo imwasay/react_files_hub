@@ -220,7 +220,6 @@ function NodesTab() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [nId, setNId] = useState('')
-  const [nSubdomain, setNSubdomain] = useState('')
   const [nWgIp, setNWgIp] = useState('')
   const [nOwner, setNOwner] = useState('')
   const [nOs, setNOs] = useState('linux')
@@ -249,12 +248,12 @@ function NodesTab() {
     setNError(''); setNToken('')
     try {
       const r = await api.post('/admin/nodes', {
-        node_id: nId, subdomain: nSubdomain || undefined,
-        wg_ip: nWgIp || undefined, owner_username: nOwner, host_os: nOs,
+        node_id: nId,
+        node_ip: nWgIp || undefined, owner_username: nOwner, host_os: nOs,
       })
       setNToken(r.data.federation_token)
       qc.invalidateQueries({ queryKey: ['admin-nodes'] })
-      setNId(''); setNSubdomain(''); setNWgIp(''); setNOwner('')
+      setNId(''); setNWgIp(''); setNOwner('')
     } catch (e: any) {
       setNError(e.response?.data?.detail || 'Registration failed')
     }
@@ -273,8 +272,7 @@ function NodesTab() {
             <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>Register storage node</div>
             <form onSubmit={registerNode} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
               <FieldRow label="Node ID" value={nId} onChange={setNId} placeholder="alice-home" required width={160} />
-              <FieldRow label="Subdomain (optional)" value={nSubdomain} onChange={setNSubdomain} placeholder="alice.ntrides.com.au" width={220} />
-              <FieldRow label="WireGuard IP" value={nWgIp} onChange={setNWgIp} placeholder="10.72.0.x" width={130} />
+              <FieldRow label="Node IP (Comma-separated routes)" value={nWgIp} onChange={setNWgIp} placeholder="10.72.0.x, example.com" width={230} />
               <FieldRow label="Owner username" value={nOwner} onChange={setNOwner} placeholder="admin" required width={140} />
               <SelectField label="OS" value={nOs} onChange={setNOs}
                 options={[{ value: 'linux', label: 'Linux' }, { value: 'windows', label: 'Windows' }, { value: 'macos', label: 'macOS' }]} />
@@ -313,9 +311,7 @@ function NodesTab() {
                     {n.host_os && <Badge text={n.host_os} color="#555" />}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, color: '#777' }}>
-                    {n.subdomain && <span>🌐 {n.subdomain}</span>}
-                    {n.wg_ip && <span>🔒 {n.wg_ip}</span>}
-                    {n.ipv4 && <span>IPv4: {n.ipv4}</span>}
+                    {n.node_ip && <span>🔒 {n.node_ip}</span>}
                     <span>owner: {n.owner}</span>
                     <span>{n.root_count} roots · {n.file_count} files</span>
                     <span>Last seen: {timeAgo(n.last_seen)}</span>

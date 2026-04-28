@@ -6,7 +6,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # shared
-    node_mode: Literal["directory", "storage", "vps-edge", "offline-demo"]
+    node_mode: Literal["directory", "storage"]
     node_version: str = "1.0.0"
     log_level: str = "info"
     tls_cert_path: str = "/certs/fullchain.pem"
@@ -14,12 +14,10 @@ class Settings(BaseSettings):
     host_os: Literal["linux", "windows", "macos"] = "linux"
 
     # directory mode
-    domain: Optional[str] = None
-    node_public_ipv4: Optional[str] = None
-    node_public_ipv6: Optional[str] = None
-    node_wg_ip: Optional[str] = None
+    node_ipv4: Optional[str] = None
+    node_ipv6: Optional[str] = None
+    node_ip: Optional[str] = None
     self_node_id: Optional[str] = None        # identity for self-node bootstrap
-    self_node_subdomain: Optional[str] = None  # public subdomain for self-node
     db_path: str = "/data/registry.db"
     vector_store_path: str = "/data/vectors"
     vector_store_backend: Literal["chroma", "qdrant", "pgvector"] = "chroma"
@@ -29,7 +27,7 @@ class Settings(BaseSettings):
     llm_priority_hosts: str = ""
     llm_health_check_interval: int = 30
     llm_model: str = "gemma3:4b"
-    embed_model: str = "nomic-embed-text"
+    embed_model: str = "nomic-ai/nomic-embed-text-v1.5"
     serve_react: bool = True
     react_static_path: str = "/app/frontend/dist"
 
@@ -40,31 +38,15 @@ class Settings(BaseSettings):
 
     # storage mode
     node_id: Optional[str] = None
-    node_public_ipv6_storage: Optional[str] = None
-    node_subdomain: Optional[str] = None
-    dir_node_wg_ip: Optional[str] = None
-    dir_node_ipv6: Optional[str] = None
-    dir_node_ipv4: Optional[str] = None
+    dir_node_ip: Optional[str] = None
     mapped_roots: str = ""
     replica_poll_base: int = 60
     replica_poll_jitter_max: int = 30
     watcher_debounce_ms: int = 2000
+    thumbnail_cache_budget_mb: int = 500  # max thumbnail cache size in MB; 0 = unlimited
     embed_host: str = "local"
     ingestion_queue_path: str = "/data/ingest_queue"
     llm_host: Optional[str] = None
-
-    # vps-edge mode
-    registry_cache_path: str = "/data/registry_cache.json"
-    registry_cache_ttl: int = 120
-    proxy_fallback: bool = True
-
-    # offline-demo overlay
-    force_ipv4: bool = False
-    local_dns_override: bool = False
-    pihole_host: Optional[str] = None
-    pihole_api_key: Optional[str] = None
-    dir_node_lan_ip: Optional[str] = None
-    lan_subnet: Optional[str] = None
 
     @property
     def is_directory(self) -> bool:
@@ -72,7 +54,7 @@ class Settings(BaseSettings):
 
     @property
     def is_storage(self) -> bool:
-        return self.node_mode in ("storage", "offline-demo")
+        return self.node_mode == "storage"
 
     @property
     def llm_hosts_list(self) -> list[str]:
@@ -85,14 +67,9 @@ class Settings(BaseSettings):
     @property
     def dir_node_contacts(self) -> list[str]:
         """Priority-ordered contact addresses for the directory node."""
-        contacts = []
-        if self.dir_node_wg_ip:
-            contacts.append(self.dir_node_wg_ip)
-        if self.dir_node_ipv6:
-            contacts.append(self.dir_node_ipv6)
-        if self.dir_node_ipv4:
-            contacts.append(self.dir_node_ipv4)
-        return contacts
+        if not self.dir_node_ip:
+            return []
+        return [h.strip() for h in self.dir_node_ip.split(",") if h.strip()]
 
     class Config:
         env_file = ".env"

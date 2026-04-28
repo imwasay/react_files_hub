@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# push-cert.sh — renew wildcard cert locally, push to all nodes via WireGuard
+# push-cert.sh — renew wildcard cert locally, push to all nodes via internal network
 # run on directory node only
 
 CERT_PATH="/etc/letsencrypt/live/ntrides.com.au"
 NODES=(
     "10.214.83.2"   # node-b
     "10.214.83.3"   # node-c
-    # add more WG IPs here
+    # add more Node IPs here
 )
 NODE_USER="ubuntu"
 REMOTE_CERT_PATH="/etc/letsencrypt/live/ntrides.com.au"

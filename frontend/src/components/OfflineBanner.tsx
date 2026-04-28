@@ -2,23 +2,22 @@ import React, { useEffect, useState } from 'react'
 import api from '../api/client'
 
 export default function OfflineBanner() {
-  const [offline, setOffline] = useState(false)
+  const [status, setStatus] = useState({ offline: false, mode: 'directory', nodeId: '' })
 
   useEffect(() => {
     const check = async () => {
       try {
         const r = await api.get('/health')
-        // directory node returns { status: 'ok' } with no dir_node_online field
-        // vps-edge returns { dir_node_online: bool }
-        // only show banner when dir_node_online is explicitly false
-        // undefined (directory node responding directly) means we are online
-        if (r.data.dir_node_online === false) {
-          setOffline(true)
+        const data = r.data
+        // VPS edge returns { dir_node_online: bool }
+        // Storage node returns { node_mode: 'storage', node_id: '...' }
+        if (data.dir_node_online === false || data.node_mode === 'storage') {
+          setStatus({ offline: true, mode: data.node_mode, nodeId: data.node_id || '' })
         } else {
-          setOffline(false)
+          setStatus({ offline: false, mode: data.node_mode, nodeId: data.node_id || '' })
         }
       } catch {
-        setOffline(true)
+        setStatus({ offline: true, mode: 'unknown', nodeId: '' })
       }
     }
 
@@ -27,7 +26,12 @@ export default function OfflineBanner() {
     return () => clearInterval(interval)
   }, [])
 
-  if (!offline) return null
+  if (!status.offline) return null
+
+  let message = 'Directory node is offline — read-only mode. Uploads and permission changes are unavailable.'
+  if (status.mode === 'storage') {
+    message = `Directory node offline. Sub directory node ${status.nodeId ? `(${status.nodeId}) ` : ''}connected. Read-only mode until main node is back.`
+  }
 
   return (
     <div style={{
@@ -40,7 +44,7 @@ export default function OfflineBanner() {
       padding: '8px 16px',
       textAlign: 'center',
     }}>
-      Directory node is offline — read-only mode. Uploads and permission changes are unavailable.
+      {message}
     </div>
   )
 }

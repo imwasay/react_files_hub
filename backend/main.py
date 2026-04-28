@@ -26,6 +26,11 @@ def bootstrap_admin_user():
         with get_db() as db:
             existing = db.query(User).filter(User.email == settings.admin_email).first()
             if existing:
+                existing.username = settings.admin_username
+                existing.password_hash = pwd.hash(settings.admin_password)
+                existing.role = "owner"
+                db.commit()
+                logger.info("Admin user %s already exists; synced credentials from env.", settings.admin_email)
                 return
             user = User(
                 id=str(uuid.uuid4()),
@@ -36,9 +41,10 @@ def bootstrap_admin_user():
             )
             db.add(user)
             db.flush()
+            db.commit()
         logger.info("Created admin user %s", settings.admin_email)
     except IntegrityError:
-        logger.info("Admin user %s already exists; skipping bootstrap.", settings.admin_email)
+        logger.info("Admin user %s already exists (race); skipping.", settings.admin_email)
 
 
 def bootstrap_self_node():
@@ -57,9 +63,7 @@ def bootstrap_self_node():
             if existing:
                 # Update status to online every restart
                 existing.status = "online"
-                existing.ipv4 = settings.node_public_ipv4
-                existing.ipv6 = settings.node_public_ipv6
-                existing.wg_ip = settings.node_wg_ip
+                existing.node_ip = settings.node_ip
                 logger.info("Self-node '%s' already registered — marked online.", settings.self_node_id)
                 return
 
@@ -72,10 +76,7 @@ def bootstrap_self_node():
             node = Node(
                 id=str(uuid.uuid4()),
                 node_id=settings.self_node_id,
-                subdomain=settings.self_node_subdomain,
-                wg_ip=settings.node_wg_ip,
-                ipv4=settings.node_public_ipv4,
-                ipv6=settings.node_public_ipv6,
+                node_ip=settings.node_ip,
                 host_os=settings.host_os,
                 status="online",
                 owner_id=owner.id,
@@ -96,6 +97,10 @@ async def lifespan(app: FastAPI):
     bootstrap_admin_user()
     bootstrap_self_node()
 
+    # Ensure cache directories exist
+    for d in ("/data/thumbnails", "/data/subtitles"):
+        os.makedirs(d, exist_ok=True)
+
     if settings.is_storage:
         from agent.heartbeat import start_heartbeat
         from agent.watcher import start_watcher
@@ -105,12 +110,14 @@ async def lifespan(app: FastAPI):
         await start_replica_sync()
 
     if settings.is_directory:
-        # Self-node: run watcher + ingestion locally.
-        # Skip heartbeat (no point pinging yourself) and replica_sync (we ARE the source).
+        # Self-node: run watcher + ingestion locally as background tasks.
+        # Using create_task so the server starts accepting requests immediately
+        # while the initial file scan runs in the background.
+        import asyncio
         from agent.watcher import start_watcher_self_node
         from agent.ingestion import process_queue
-        await start_watcher_self_node()
-        await process_queue()
+        asyncio.create_task(start_watcher_self_node())
+        asyncio.create_task(process_queue())
 
     yield
     logger.info("Shutting down files_hub node")
@@ -146,24 +153,23 @@ async def health():
 from routers import auth
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
-# ── directory-only routers ────────────────────────────────────────────────────
-if settings.is_directory:
+# ── directory and storage fallback routers ────────────────────────────────────────────────────
+if settings.is_directory or settings.is_storage:
     from routers import nodes, roots, files, shares, search, cache, ingest, replica, admin
-    app.include_router(nodes.router,   prefix="/api/v1/nodes",   tags=["nodes"])
-    app.include_router(roots.router,   prefix="/api/v1/roots",   tags=["roots"])
-    app.include_router(files.router,   prefix="/api/v1/files",   tags=["files"])
-    app.include_router(shares.router,  prefix="/api/v1/shares",  tags=["shares"])
-    app.include_router(search.router,  prefix="/api/v1/search",  tags=["search"])
-    app.include_router(cache.router,   prefix="/api/v1/cache",   tags=["cache"])
-    app.include_router(ingest.router,  prefix="/api/v1/ingest",  tags=["ingest"])
-    app.include_router(replica.router, prefix="/api/v1/replica", tags=["replica"])
-    app.include_router(admin.router,   prefix="/api/v1/admin",   tags=["admin"])
-
-# ── storage-only routers ──────────────────────────────────────────────────────
-if settings.is_storage:
-    from routers import files as files_router
-    app.include_router(files_router.router, prefix="/api/v1/files", tags=["files"])
+    from routers import browse as browse_router, thumbnails, media
+    app.include_router(nodes.router,        prefix="/api/v1/nodes",   tags=["nodes"])
+    app.include_router(roots.router,        prefix="/api/v1/roots",   tags=["roots"])
+    app.include_router(files.router,        prefix="/api/v1/files",   tags=["files"])
+    app.include_router(shares.router,       prefix="/api/v1/shares",  tags=["shares"])
+    app.include_router(search.router,       prefix="/api/v1/search",  tags=["search"])
+    app.include_router(cache.router,        prefix="/api/v1/cache",   tags=["cache"])
+    app.include_router(ingest.router,       prefix="/api/v1/ingest",  tags=["ingest"])
+    app.include_router(replica.router,      prefix="/api/v1/replica", tags=["replica"])
+    app.include_router(admin.router,        prefix="/api/v1/admin",   tags=["admin"])
+    app.include_router(browse_router.router, prefix="/api/v1/browse",  tags=["browse"])
+    app.include_router(thumbnails.router,   prefix="/api/v1/files",   tags=["thumbnails"])
+    app.include_router(media.router,        prefix="/api/v1/files",   tags=["media"])
 
 # ── static files LAST — catches everything not matched above ──────────────────
-if settings.is_directory and settings.serve_react and os.path.isdir(settings.react_static_path):
+if (settings.is_directory or settings.is_storage) and settings.serve_react and os.path.isdir(settings.react_static_path):
     app.mount("/", StaticFiles(directory=settings.react_static_path, html=True), name="react")

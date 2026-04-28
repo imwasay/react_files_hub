@@ -175,10 +175,7 @@ def list_nodes(db: Session = Depends(get_db_dep), _: User = Depends(require_admi
     return [
         {
             "node_id": n.node_id,
-            "subdomain": n.subdomain,
-            "wg_ip": n.wg_ip,
-            "ipv4": n.ipv4,
-            "ipv6": n.ipv6,
+            "node_ip": n.node_ip,
             "host_os": n.host_os,
             "status": n.status,
             "last_seen": n.last_seen,
@@ -196,10 +193,7 @@ def list_nodes(db: Session = Depends(get_db_dep), _: User = Depends(require_admi
 
 class AdminRegisterNodeRequest(BaseModel):
     node_id: str
-    subdomain: Optional[str] = None
-    wg_ip: Optional[str] = None
-    ipv4: Optional[str] = None
-    ipv6: Optional[str] = None
+    node_ip: Optional[str] = None
     host_os: str = "linux"
     owner_username: str  # which user owns this node
 
@@ -221,10 +215,7 @@ def admin_register_node(
     node = Node(
         id=str(uuid.uuid4()),
         node_id=body.node_id,
-        subdomain=body.subdomain,
-        wg_ip=body.wg_ip,
-        ipv4=body.ipv4,
-        ipv6=body.ipv6,
+        node_ip=body.node_ip,
         host_os=body.host_os,
         status="offline",
         owner_id=owner.id,

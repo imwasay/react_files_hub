@@ -20,18 +20,13 @@ settings = get_settings()
 
 class RegisterNodeRequest(BaseModel):
     node_id: str
-    subdomain: str
-    wg_ip: Optional[str] = None
-    ipv6: Optional[str] = None
-    ipv4: Optional[str] = None
+    node_ip: Optional[str] = None
     host_os: str = "linux"
 
 
 class HeartbeatRequest(BaseModel):
     node_id: str
-    wg_ip: Optional[str] = None
-    ipv6: Optional[str] = None
-    ipv4: Optional[str] = None
+    node_ip: Optional[str] = None
     cache_used_bytes: int = 0
     status: str = "online"
 
@@ -57,10 +52,7 @@ def register_node(
     node = Node(
         id=str(uuid.uuid4()),
         node_id=body.node_id,
-        subdomain=body.subdomain,
-        wg_ip=body.wg_ip,
-        ipv6=body.ipv6,
-        ipv4=body.ipv4,
+        node_ip=body.node_ip,
         host_os=body.host_os,
         status="offline",
         owner_id=user.id,
@@ -85,9 +77,7 @@ def heartbeat(
     db: Session = Depends(get_db_dep),
     node: Node = Depends(verify_federation_token),
 ):
-    node.wg_ip = body.wg_ip or node.wg_ip
-    node.ipv6 = body.ipv6 or node.ipv6
-    node.ipv4 = body.ipv4 or node.ipv4
+    node.node_ip = body.node_ip or node.node_ip
     node.status = body.status
     node.last_seen = datetime.utcnow()
 
@@ -106,7 +96,6 @@ def list_nodes(
     return [
         {
             "node_id": n.node_id,
-            "subdomain": n.subdomain,
             "status": n.status,
             "owner": n.owner.username,
             "cache_budget_bytes": n.cache_config.budget_bytes if n.cache_config else 0,
@@ -130,7 +119,5 @@ def node_status(
         "node_id": node.node_id,
         "status": node.status,
         "last_seen": node.last_seen,
-        "ipv6": node.ipv6,
-        "ipv4": node.ipv4,
         "cache_used_bytes": node.cache_config.used_bytes if node.cache_config else 0,
     }

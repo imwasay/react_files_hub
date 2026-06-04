@@ -17,8 +17,8 @@ class Node(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     owner = relationship("User", back_populates="nodes")
-    files = relationship("File", back_populates="node")
-    mapped_roots = relationship("MappedRoot", back_populates="node")
-    cache_entries = relationship("FileCache", back_populates="cached_on_node")
-    cache_keys = relationship("CacheKey", back_populates="node")
-    cache_config = relationship("NodeCacheConfig", back_populates="node", uselist=False)
+    files = relationship("File", back_populates="node", cascade="all, delete-orphan")
+    mapped_roots = relationship("MappedRoot", back_populates="node", cascade="all, delete-orphan")
+    cache_entries = relationship("FileCache", back_populates="cached_on_node", cascade="all, delete-orphan")
+    cache_keys = relationship("CacheKey", back_populates="node", cascade="all, delete-orphan")
+    cache_config = relationship("NodeCacheConfig", back_populates="node", uselist=False, cascade="all, delete-orphan")

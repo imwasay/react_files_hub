@@ -21,129 +21,130 @@ function getMode(filename: string): RenderMode {
 }
 
 // ── PDF Renderer (canvas via pdf.js CDN — works perfectly on mobile) ──────────
-function PdfRenderer({ streamUrl, filename, onClose }: { streamUrl: string; filename: string; onClose: () => void }) {
+// ── PDF Page Component (renders a single page inside viewport) ────────────────
+const PdfPage = React.memo(function PdfPage({ 
+  pdfDoc, 
+  pageNum, 
+  zoom, 
+  onVisible 
+}: { 
+  pdfDoc: any; 
+  pageNum: number; 
+  zoom: number; 
+  onVisible: (num: number) => void 
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [pdfDoc, setPdfDoc] = useState<any>(null)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(0)
-  const [zoom, setZoom] = useState(1.2)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [rendered, setRendered] = useState(false)
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
   const renderingRef = useRef(false)
-  const pendingRef = useRef<number | null>(null)
 
+  // Get viewport size to allocate space immediately (prevents layout jumping)
   useEffect(() => {
-    const loadPdfJs = async () => {
-      if ((window as any).pdfjsLib) return
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement('script')
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-        script.onload = () => resolve()
-        script.onerror = () => reject(new Error('Failed to load pdf.js'))
-        document.head.appendChild(script)
-      })
-      const pdfjsLib = (window as any).pdfjsLib
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-    }
+    let active = true
+    pdfDoc.getPage(pageNum).then((page: any) => {
+      if (!active) return
+      const viewport = page.getViewport({ scale: zoom })
+      setDimensions({ width: viewport.width, height: viewport.height })
+    })
+    return () => { active = false }
+  }, [pdfDoc, pageNum, zoom])
 
-    loadPdfJs()
-      .then(() => loadPDF())
-      .catch(() => setError('Failed to load PDF viewer'))
-  }, [])
-
-  const loadPDF = async () => {
-    try {
-      setLoading(true)
-      const pdfjsLib = (window as any).pdfjsLib
-      const doc = await pdfjsLib.getDocument(streamUrl).promise
-      setPdfDoc(doc)
-      setTotalPages(doc.numPages)
-      setLoading(false)
-    } catch (e: any) {
-      setError(`Failed to load PDF: ${e.message || 'Unknown error'}`)
-      setLoading(false)
-    }
-  }
-
-  const renderPage = useCallback(async (num: number) => {
-    if (!pdfDoc || !canvasRef.current) return
-    if (renderingRef.current) {
-      pendingRef.current = num
-      return
-    }
-    renderingRef.current = true
-    try {
-      const p = await pdfDoc.getPage(num)
-      const viewport = p.getViewport({ scale: zoom })
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')!
-      canvas.height = viewport.height
-      canvas.width = viewport.width
-      await p.render({ canvasContext: ctx, viewport }).promise
-    } catch {
-      // ignore render errors
-    } finally {
-      renderingRef.current = false
-      if (pendingRef.current !== null) {
-        const pending = pendingRef.current
-        pendingRef.current = null
-        renderPage(pending)
-      }
-    }
-  }, [pdfDoc, zoom])
-
+  // IntersectionObserver to render lazily when page is near the viewport
   useEffect(() => {
-    if (pdfDoc) renderPage(page)
-  }, [pdfDoc, page, zoom, renderPage])
+    if (!containerRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !rendered && !renderingRef.current) {
+          renderingRef.current = true
+          pdfDoc.getPage(pageNum).then((page: any) => {
+            const canvas = canvasRef.current
+            if (!canvas) return
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+            const viewport = page.getViewport({ scale: zoom })
+            canvas.width = viewport.width
+            canvas.height = viewport.height
+            page.render({ canvasContext: ctx, viewport }).promise.then(() => {
+              setRendered(true)
+              renderingRef.current = false
+            }).catch(() => {
+              renderingRef.current = false
+            })
+          })
+        }
+      },
+      { rootMargin: '600px 0px' } // Load page when it is 600px close to entering viewport
+    )
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [pdfDoc, pageNum, zoom, rendered])
 
+  // Observer to track which page is currently most visible in viewport
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') setPage(p => Math.max(1, p - 1))
-      else if (e.key === 'ArrowRight') setPage(p => Math.min(totalPages, p + 1))
-      else if (e.key === '+' || e.key === '=') setZoom(z => Math.min(z + 0.25, 4))
-      else if (e.key === '-') setZoom(z => Math.max(z - 0.25, 0.5))
-      else if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [totalPages, onClose])
+    if (!containerRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onVisible(pageNum)
+        }
+      },
+      { threshold: 0.3 }
+    )
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [pageNum, onVisible])
+
+  // Reset rendered state when zoom changes
+  useEffect(() => {
+    setRendered(false)
+  }, [zoom])
+
+  const width = dimensions?.width || 500
+  const height = dimensions?.height || 700
 
   return (
-    <>
-      {/* PDF-specific toolbar extras */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="vw-btn">← Prev</button>
-        <span className="vw-badge">{page} / {totalPages}</span>
-        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="vw-btn">Next →</button>
-        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 6, padding: '0.125rem', gap: '0.125rem' }}>
-          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="vw-btn-sm">−</button>
-          <span style={{ padding: '0 0.5rem', fontSize: '0.8125rem', color: 'white', minWidth: 44, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="vw-btn-sm">+</button>
+    <div 
+      ref={containerRef} 
+      data-page-number={pageNum}
+      style={{ 
+        width: `${width}px`, 
+        height: `${height}px`, 
+        margin: '1rem auto', 
+        background: '#fff', 
+        borderRadius: 8, 
+        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+        position: 'relative'
+      }}
+    >
+      <canvas 
+        ref={canvasRef} 
+        style={{ 
+          display: rendered ? 'block' : 'none', 
+          width: '100%', 
+          height: '100%',
+          borderRadius: 8
+        }} 
+      />
+      {!rendered && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem',
+          color: '#94a3b8',
+          fontSize: '0.875rem'
+        }}>
+          <div className="vw-spinner" style={{ width: 24, height: 24 }} />
+          <span>Page {pageNum}</span>
         </div>
-      </div>
-
-      {/* Canvas area */}
-      <div ref={containerRef} style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '1rem', background: '#0a0a0a' }}>
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '3rem', color: '#94a3b8' }}>
-            <div className="vw-spinner" />
-            <span>Loading PDF...</span>
-          </div>
-        ) : error ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#ef4444' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
-            <div style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>{error}</div>
-            <button onClick={() => window.open(streamUrl, '_blank')} className="vw-btn">Open in new tab</button>
-          </div>
-        ) : (
-          <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.5)', background: 'white' }} />
-        )}
-      </div>
-    </>
+      )}
+    </div>
   )
-}
+})
 
 // ── DOCX Renderer ────────────────────────────────────────────────────────────
 function DocxRenderer({ url }: { url: string }) {
@@ -372,7 +373,6 @@ function PdfControls({ streamUrl, filename, downloadUrl, onClose }: { streamUrl:
 }
 
 function PdfCanvas({ streamUrl, onClose }: { streamUrl: string; onClose: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [page, setPage] = useState(1)
@@ -380,12 +380,9 @@ function PdfCanvas({ streamUrl, onClose }: { streamUrl: string; onClose: () => v
   const [zoom, setZoom] = useState(1.0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const renderingRef = useRef(false)
-  const pendingRef = useRef<number | null>(null)
   const pageRef = useRef(page)
-  const zoomRef = useRef(zoom)
   const totalRef = useRef(totalPages)
-  pageRef.current = page; zoomRef.current = zoom; totalRef.current = totalPages
+  pageRef.current = page; totalRef.current = totalPages
 
   useEffect(() => {
     const loadPdfJs = async () => {
@@ -421,29 +418,18 @@ function PdfCanvas({ streamUrl, onClose }: { streamUrl: string; onClose: () => v
     }).catch(() => setError('Failed to load pdf.js'))
   }, [])
 
-  const renderPage = useCallback(async (num: number, doc: any, z: number) => {
-    if (!doc || !canvasRef.current) return
-    if (renderingRef.current) { pendingRef.current = num; return }
-    renderingRef.current = true
-    try {
-      const p = await doc.getPage(num)
-      const viewport = p.getViewport({ scale: z })
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')!
-      canvas.height = viewport.height; canvas.width = viewport.width
-      await p.render({ canvasContext: ctx, viewport }).promise
-      const label = document.getElementById('pdf-page-label')
-      if (label) label.textContent = `${num} / ${doc.numPages}`
-    } catch { /* ignore */ } finally {
-      renderingRef.current = false
-      if (pendingRef.current !== null) {
-        const p = pendingRef.current; pendingRef.current = null
-        renderPage(p, doc, zoomRef.current)
-      }
-    }
+  const handleVisible = useCallback((num: number) => {
+    setPage(num)
+    const el = document.getElementById('pdf-page-label')
+    if (el) el.textContent = `${num} / ${totalRef.current}`
   }, [])
 
-  useEffect(() => { if (pdfDoc) renderPage(page, pdfDoc, zoom) }, [pdfDoc, page, zoom, renderPage])
+  const scrollToPage = useCallback((num: number) => {
+    const pageEl = containerRef.current?.querySelector(`[data-page-number="${num}"]`)
+    if (pageEl) {
+      pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
 
   useEffect(() => {
     const updateZoomLabel = (z: number) => {
@@ -452,23 +438,41 @@ function PdfCanvas({ streamUrl, onClose }: { streamUrl: string; onClose: () => v
     }
     const handler = (e: Event) => {
       const type = (e as CustomEvent).detail
-      if (type === 'prev') setPage(p => Math.max(1, p - 1))
-      else if (type === 'next') setPage(p => Math.min(totalRef.current, p + 1))
-      else if (type === 'zoom-in') setZoom(z => { const nz = Math.min(z + 0.25, 4); updateZoomLabel(nz); return nz })
-      else if (type === 'zoom-out') setZoom(z => { const nz = Math.max(z - 0.25, 0.5); updateZoomLabel(nz); return nz })
+      if (type === 'prev') {
+        const prev = Math.max(1, pageRef.current - 1)
+        scrollToPage(prev)
+      } else if (type === 'next') {
+        const next = Math.min(totalRef.current, pageRef.current + 1)
+        scrollToPage(next)
+      } else if (type === 'zoom-in') {
+        setZoom(z => { const nz = Math.min(z + 0.25, 4); updateZoomLabel(nz); return nz })
+      } else if (type === 'zoom-out') {
+        setZoom(z => { const nz = Math.max(z - 0.25, 0.5); updateZoomLabel(nz); return nz })
+      }
     }
     const kb = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') setPage(p => Math.max(1, p - 1))
-      else if (e.key === 'ArrowRight') setPage(p => Math.min(totalRef.current, p + 1))
-      else if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const prev = Math.max(1, pageRef.current - 1)
+        scrollToPage(prev)
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        const next = Math.min(totalRef.current, pageRef.current + 1)
+        scrollToPage(next)
+      } else if (e.key === 'Escape') {
+        onClose()
+      }
     }
     window.addEventListener('pdf-ctrl', handler as EventListener)
     window.addEventListener('keydown', kb)
-    return () => { window.removeEventListener('pdf-ctrl', handler as EventListener); window.removeEventListener('keydown', kb) }
-  }, [onClose])
+    return () => { 
+      window.removeEventListener('pdf-ctrl', handler as EventListener)
+      window.removeEventListener('keydown', kb) 
+    }
+  }, [onClose, scrollToPage])
 
   return (
-    <div ref={containerRef} style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '1rem', background: '#0a0a0a' }}>
+    <div ref={containerRef} style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1rem', background: '#0a0a0a' }}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '3rem', color: '#94a3b8' }}>
           <div className="vw-spinner" />
@@ -481,7 +485,17 @@ function PdfCanvas({ streamUrl, onClose }: { streamUrl: string; onClose: () => v
           <button onClick={() => window.open(streamUrl, '_blank')} className="vw-btn">Open in new tab</button>
         </div>
       ) : (
-        <canvas ref={canvasRef} style={{ borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.5)', background: 'white' }} />
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+            <PdfPage
+              key={pageNum}
+              pdfDoc={pdfDoc}
+              pageNum={pageNum}
+              zoom={zoom}
+              onVisible={handleVisible}
+            />
+          ))}
+        </div>
       )}
     </div>
   )

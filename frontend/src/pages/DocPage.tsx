@@ -1,21 +1,27 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getFile, resolveStreamUrl } from '../api/files'
-import PDFViewer from '../components/PDFViewer'
+import { getDownloadUrl } from '../api/browse'
+import UniversalViewer from '../components/UniversalViewer'
 
-export default function PdfPage() {
+export default function DocPage() {
   const { file_id } = useParams<{ file_id: string }>()
   const navigate = useNavigate()
   const [file, setFile] = useState<any>(null)
   const [streamUrl, setStreamUrl] = useState('')
+  const [downloadUrl, setDownloadUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!file_id) return
     Promise.all([getFile(file_id), resolveStreamUrl(file_id)])
-      .then(([f, url]) => { setFile(f); setStreamUrl(url) })
-      .catch(e => setError(e.message || 'Failed to load PDF'))
+      .then(([f, url]) => { 
+        setFile(f)
+        setStreamUrl(url)
+        setDownloadUrl(getDownloadUrl(file_id))
+      })
+      .catch(e => setError(e.message || 'Failed to load document'))
       .finally(() => setLoading(false))
   }, [file_id])
 
@@ -43,10 +49,11 @@ export default function PdfPage() {
   }
 
   return (
-    <PDFViewer
+    <UniversalViewer
       fileId={file_id!}
       filename={file.filename}
       streamUrl={streamUrl}
+      downloadUrl={downloadUrl}
       onClose={handleClose}
     />
   )

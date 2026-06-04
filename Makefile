@@ -24,6 +24,11 @@ logs-backend:
 build-frontend:
 	cd frontend && npm ci && npm run build
 
+deploy-local: build-frontend
+	sudo mkdir -p /var/www/files_hub
+	sudo cp -r frontend/dist/* /var/www/files_hub/
+	sudo chown -R www-data:www-data /var/www/files_hub/
+
 # ── Deploy ───────────────────────────────────────────────────────────────────
 
 deploy-vps: build-frontend

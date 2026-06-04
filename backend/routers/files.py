@@ -321,3 +321,31 @@ def delete_file(
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
     db.delete(f)
+
+
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: str,
+    request: Request,
+    db: Session = Depends(get_db_dep),
+    user: User = Depends(get_current_user),
+):
+    """Download a file (Content-Disposition: attachment).
+    Same logic as /stream but forces the browser to save instead of display inline."""
+    q = _visible_file_filter(db.query(File), db, user)
+    f = q.filter(File.id == file_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Self-node: serve directly from local filesystem
+    if settings.self_node_id and f.node.node_id == settings.self_node_id:
+        if not os.path.isfile(f.real_path):
+            raise HTTPException(status_code=404, detail=f"File not found on disk: {f.real_path}")
+        return FileResponse(
+            f.real_path,
+            media_type=f.mime_type or "application/octet-stream",
+            filename=f.filename,
+        )
+
+    range_header = request.headers.get("range")
+    return await stream_file_proxy(f, range_header)

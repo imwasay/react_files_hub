@@ -9,7 +9,7 @@ import Browse from './pages/Browse'
 import Search from './pages/Search'
 import Share from './pages/Share'
 import Player from './pages/Player'
-import PdfPage from './pages/PdfPage'
+import DocPage from './pages/DocPage'
 import Admin from './pages/Admin'
 import AppShell from './components/AppShell'
 import OfflineBanner from './components/OfflineBanner'
@@ -86,7 +86,7 @@ export default function App() {
           <Route path="/browse/*" element={<AuthenticatedApp><Browse /></AuthenticatedApp>} />
           <Route path="/search" element={<AuthenticatedApp><Search /></AuthenticatedApp>} />
           <Route path="/play/:file_id" element={<AuthenticatedApp><Player /></AuthenticatedApp>} />
-          <Route path="/pdf/:file_id" element={<AuthenticatedApp><PdfPage /></AuthenticatedApp>} />
+          <Route path="/doc/:file_id" element={<AuthenticatedApp><DocPage /></AuthenticatedApp>} />
           <Route path="/admin" element={<AuthenticatedApp><Admin /></AuthenticatedApp>} />
 
           {/* Default redirect */}

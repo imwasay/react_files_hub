@@ -15,7 +15,8 @@ services:
       - /etc/letsencrypt:/certs:ro
       # ── Drive mounts ────────────────────────────────────────────────────
       # Add your actual paths here. Examples:
-      #   - /mnt/WD2T:/mnt/WD2T:ro
+      - /mnt/WD2T/Studies:/mnt/WD2T/Studies:ro
+      - /mnt/WD2T/Movies:/mnt/WD2T/Movies:ro
       #   - /home/user/shared:/mnt/shared:ro
       #   - C:/Users/friend/Files:/mnt/share1:ro   # Windows
     ports:

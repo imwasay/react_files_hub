@@ -59,6 +59,26 @@ def init_db():
     import models.file_cache
     import models.cache_key
     Base.metadata.create_all(bind=engine)
+
+    # Clean up duplicate files (keeping one per node_id + real_path)
+    from sqlalchemy import text
+    try:
+        with get_db() as db:
+            db.execute(text(
+                "DELETE FROM files WHERE id NOT IN ("
+                "  SELECT MIN(id) FROM files GROUP BY node_id, real_path"
+                ")"
+            ))
+            # Also create unique index to enforce this at database level
+            db.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_files_node_real_path "
+                "ON files (node_id, real_path)"
+            ))
+            db.commit()
+        logger.info("Database duplicate files cleaned up and unique index verified.")
+    except Exception as e:
+        logger.warning("Database duplicate cleanup/index creation failed: %s", e)
+
     logger.info("Database initialized at %s", _get_db_path())
 
 

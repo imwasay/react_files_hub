@@ -102,24 +102,71 @@ async def lifespan(app: FastAPI):
         os.makedirs(d, exist_ok=True)
 
     if settings.is_storage:
-        from agent.heartbeat import start_heartbeat
-        from agent.watcher import start_watcher
-        from agent.replica_sync import start_replica_sync
-        await start_heartbeat()
-        await start_watcher()
-        await start_replica_sync()
+        # Prevent multiple workers from running tasks concurrently
+        try:
+            import fcntl
+            lock_file = open("/tmp/files_hub_storage_tasks.lock", "w")
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            app.state.storage_lock = lock_file
+
+            from agent.heartbeat import start_heartbeat
+            from agent.watcher import start_watcher
+            from agent.replica_sync import start_replica_sync
+            await start_heartbeat()
+            await start_watcher()
+            await start_replica_sync()
+            logger.info("Successfully started storage tasks on worker.")
+        except BlockingIOError:
+            logger.info("Another worker is running storage tasks. Skipping.")
+        except Exception as e:
+            logger.warning("Storage tasks lock failed, running anyway: %s", e)
+            from agent.heartbeat import start_heartbeat
+            from agent.watcher import start_watcher
+            from agent.replica_sync import start_replica_sync
+            await start_heartbeat()
+            await start_watcher()
+            await start_replica_sync()
 
     if settings.is_directory:
-        # Self-node: run watcher + ingestion locally as background tasks.
-        # Using create_task so the server starts accepting requests immediately
-        # while the initial file scan runs in the background.
-        import asyncio
-        from agent.watcher import start_watcher_self_node
-        from agent.ingestion import process_queue
-        asyncio.create_task(start_watcher_self_node())
-        asyncio.create_task(process_queue())
+        # Prevent multiple workers from running tasks concurrently
+        try:
+            import fcntl
+            lock_file = open("/tmp/files_hub_dir_tasks.lock", "w")
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            app.state.dir_lock = lock_file
+
+            import asyncio
+            from agent.watcher import start_watcher_self_node
+            from agent.ingestion import process_queue
+            asyncio.create_task(start_watcher_self_node())
+            asyncio.create_task(process_queue())
+            logger.info("Successfully started directory tasks on worker.")
+        except BlockingIOError:
+            logger.info("Another worker is running directory tasks. Skipping.")
+        except Exception as e:
+            logger.warning("Directory tasks lock failed, running anyway: %s", e)
+            import asyncio
+            from agent.watcher import start_watcher_self_node
+            from agent.ingestion import process_queue
+            asyncio.create_task(start_watcher_self_node())
+            asyncio.create_task(process_queue())
 
     yield
+    # Release locks if held
+    if hasattr(app.state, "storage_lock"):
+        try:
+            import fcntl
+            fcntl.flock(app.state.storage_lock, fcntl.LOCK_UN)
+            app.state.storage_lock.close()
+        except Exception:
+            pass
+    if hasattr(app.state, "dir_lock"):
+        try:
+            import fcntl
+            fcntl.flock(app.state.dir_lock, fcntl.LOCK_UN)
+            app.state.dir_lock.close()
+        except Exception:
+            pass
     logger.info("Shutting down files_hub node")
 
 

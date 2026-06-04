@@ -42,8 +42,8 @@ export default function Browse() {
         setImageViewerIndex(idx)
         setImageViewerOpen(true)
       }
-    } else if (item.file_type === 'document' && item.mime_type === 'application/pdf') {
-      navigate(`/pdf/${item.file_id}`)
+    } else if (item.file_type === 'document' || /\.(pdf|docx|xlsx|pptx|csv|md|txt)\s*$/i.test(item.name || '')) {
+      navigate(`/doc/${item.file_id}`)
     } else {
       window.open(getDownloadUrl(item.file_id!), '_blank')
     }

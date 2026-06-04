@@ -62,6 +62,14 @@ def admin_system(db: Session = Depends(get_db_dep), _: User = Depends(require_ad
                 info["used_bytes"] = (stat.f_blocks - stat.f_bfree) * stat.f_frsize
             except Exception:
                 pass
+        elif not is_self and accessible:
+            from routers.nodes import node_disk_stats
+            node_stats = node_disk_stats.get(r.node.node_id, {})
+            root_stats = node_stats.get(r.real_path)
+            if root_stats:
+                info["total_bytes"] = root_stats["total_bytes"]
+                info["free_bytes"] = root_stats["free_bytes"]
+                info["used_bytes"] = root_stats["used_bytes"]
         roots_info.append(info)
 
     return {

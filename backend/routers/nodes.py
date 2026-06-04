@@ -18,10 +18,22 @@ router = APIRouter()
 settings = get_settings()
 
 
+from typing import List
+
+node_disk_stats = {}  # node_id -> {real_path: {total_bytes, free_bytes, used_bytes}}
+
+
 class RegisterNodeRequest(BaseModel):
     node_id: str
     node_ip: Optional[str] = None
     host_os: str = "linux"
+
+
+class HeartbeatMappedRootDisk(BaseModel):
+    real_path: str
+    total_bytes: int
+    free_bytes: int
+    used_bytes: int
 
 
 class HeartbeatRequest(BaseModel):
@@ -29,6 +41,7 @@ class HeartbeatRequest(BaseModel):
     node_ip: Optional[str] = None
     cache_used_bytes: int = 0
     status: str = "online"
+    roots_disk: Optional[List[HeartbeatMappedRootDisk]] = None
 
 
 def _make_federation_token(node_id: str) -> str:
@@ -80,6 +93,17 @@ def heartbeat(
     node.node_ip = body.node_ip or node.node_ip
     node.status = body.status
     node.last_seen = datetime.utcnow()
+
+    # Cache disk stats
+    if body.roots_disk is not None:
+        node_disk_stats[node.node_id] = {
+            r.real_path: {
+                "total_bytes": r.total_bytes,
+                "free_bytes": r.free_bytes,
+                "used_bytes": r.used_bytes,
+            }
+            for r in body.roots_disk
+        }
 
     if node.cache_config:
         node.cache_config.used_bytes = body.cache_used_bytes

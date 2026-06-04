@@ -28,6 +28,21 @@ async def _send_heartbeat():
     try:
         url = await _get_dir_url()
         cache_used = _get_cache_used_bytes()
+
+        roots_disk = []
+        for path in settings.mapped_roots_list:
+            if os.path.isdir(path):
+                try:
+                    stat = os.statvfs(path)
+                    roots_disk.append({
+                        "real_path": path,
+                        "total_bytes": stat.f_blocks * stat.f_frsize,
+                        "free_bytes": stat.f_bavail * stat.f_frsize,
+                        "used_bytes": (stat.f_blocks - stat.f_bfree) * stat.f_frsize,
+                    })
+                except Exception:
+                    pass
+
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
                 f"{url}/api/v1/nodes/heartbeat",
@@ -36,6 +51,7 @@ async def _send_heartbeat():
                     "node_ip": settings.node_ip,
                     "cache_used_bytes": cache_used,
                     "status": "online",
+                    "roots_disk": roots_disk,
                 },
                 headers={"X-Federation-Token": FEDERATION_TOKEN},
             )

@@ -84,7 +84,24 @@ def heartbeat(
     if node.cache_config:
         node.cache_config.used_bytes = body.cache_used_bytes
 
-    return {"ok": True, "server_time": datetime.utcnow().isoformat()}
+    # ── User sync: send all users to storage node for decentralized auth ──
+    users = db.query(User).all()
+    user_snapshot = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "password_hash": u.password_hash,
+            "role": u.role,
+        }
+        for u in users
+    ]
+
+    return {
+        "ok": True,
+        "server_time": datetime.utcnow().isoformat(),
+        "user_snapshot": user_snapshot,
+    }
 
 
 @router.get("")

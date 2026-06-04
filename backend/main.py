@@ -149,6 +149,39 @@ async def health():
         "status": "ok",
     }
 
+# ── mesh config — frontend reads this on startup ──────────────────────────────
+@app.get("/api/v1/config")
+async def get_config():
+    """Public endpoint. Frontend calls this on startup to learn the mesh topology.
+    
+    Returns this node's identity and, if this is a directory node, the list of
+    all registered storage nodes and their multi-route addresses. The frontend
+    uses this to know where to fall back if the directory node goes offline.
+    """
+    config = {
+        "node_mode": settings.node_mode,
+        "node_id": settings.node_id or settings.self_node_id,
+        "node_ip": settings.node_ip,
+        "version": settings.node_version,
+    }
+    
+    # If directory node, include all registered storage nodes so the frontend
+    # can contact them directly as fallback when this node goes offline
+    if settings.is_directory:
+        try:
+            from database import get_db
+            from models.node import Node
+            with get_db() as db:
+                nodes = db.query(Node).filter(Node.status != "offline").all()
+                config["storage_nodes"] = [
+                    {"node_id": n.node_id, "node_ip": n.node_ip, "status": n.status}
+                    for n in nodes
+                ]
+        except Exception:
+            config["storage_nodes"] = []
+    
+    return config
+
 # ── auth ──────────────────────────────────────────────────────────────────────
 from routers import auth
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])

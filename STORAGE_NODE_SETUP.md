@@ -76,8 +76,8 @@ cd ~
 git clone https://github.com/youruser/react_files_hub.git
 cd react_files_hub
 
-# Copy the storage node env template
-cp .env.storage.example .env
+# Copy the env template
+cp .env.example .env
 ```
 
 Edit `.env` and fill in:
@@ -102,7 +102,7 @@ NODE_IP=10.72.0.3, 2001:db8::3       # this machine's reachable routes
 
 ## Step 5 — Mount the drives in docker-compose
 
-Edit `docker-compose.storage.yml` to add your local drives:
+Edit `docker-compose.yml` to add your local drives:
 
 ```yaml
 services:
@@ -121,7 +121,7 @@ Only paths listed here will be visible inside the container.
 
 ```bash
 cd ~/react_files_hub
-bash scripts/deploy-storage.sh
+docker compose up -d --build
 ```
 
 This builds the image and starts the storage node. You should see in the logs:

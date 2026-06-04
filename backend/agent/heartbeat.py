@@ -40,11 +40,46 @@ async def _send_heartbeat():
                 headers={"X-Federation-Token": FEDERATION_TOKEN},
             )
             if r.status_code == 200:
+                data = r.json()
                 logger.debug("Heartbeat OK at %s", datetime.utcnow())
+                # ── User sync: upsert users from directory node ──
+                if "user_snapshot" in data:
+                    _sync_users(data["user_snapshot"])
             else:
                 logger.warning("Heartbeat failed: %s", r.text)
     except Exception as e:
         logger.warning("Heartbeat error: %s", e)
+
+
+def _sync_users(snapshot: list):
+    """Upsert users from directory node into local SQLite.
+    
+    This enables decentralized auth — the storage node can authenticate
+    users from its local DB even if the directory node goes offline.
+    """
+    from database import get_db
+    from models.user import User
+    try:
+        with get_db() as db:
+            for u in snapshot:
+                existing = db.query(User).filter(User.id == u["id"]).first()
+                if existing:
+                    existing.username = u["username"]
+                    existing.email = u["email"]
+                    existing.password_hash = u["password_hash"]
+                    existing.role = u["role"]
+                else:
+                    db.add(User(
+                        id=u["id"],
+                        username=u["username"],
+                        email=u["email"],
+                        password_hash=u["password_hash"],
+                        role=u["role"],
+                    ))
+            db.commit()
+        logger.debug("User sync: %d users upserted", len(snapshot))
+    except Exception as e:
+        logger.warning("User sync failed: %s", e)
 
 
 def _get_cache_used_bytes() -> int:

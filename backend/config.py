@@ -14,8 +14,6 @@ class Settings(BaseSettings):
     host_os: Literal["linux", "windows", "macos"] = "linux"
 
     # directory mode
-    node_ipv4: Optional[str] = None
-    node_ipv6: Optional[str] = None
     node_ip: Optional[str] = None
     self_node_id: Optional[str] = None        # identity for self-node bootstrap
     db_path: str = "/data/registry.db"

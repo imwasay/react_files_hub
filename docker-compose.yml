@@ -1,0 +1,40 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Files Hub — Unified Docker Compose
+# Works for both Directory and Storage nodes. Set NODE_MODE in .env.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ./frontend/dist:/app/frontend/dist:ro
+      - /etc/letsencrypt:/certs:ro
+      # ── Drive mounts ────────────────────────────────────────────────────
+      # Add your actual paths here. Examples:
+      #   - /mnt/WD2T:/mnt/WD2T:ro
+      #   - /home/user/shared:/mnt/shared:ro
+      #   - C:/Users/friend/Files:/mnt/share1:ro   # Windows
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+      - "${INTERNAL_PORT:-8001}:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ChromaDB — only needed on Directory nodes for semantic search.
+  # Start with: docker compose --profile directory up -d
+  chromadb:
+    image: chromadb/chroma:latest
+    volumes:
+      - ./data/vectors:/chroma/chroma
+    ports:
+      - "127.0.0.1:8010:8000"
+    restart: unless-stopped
+    profiles: ["directory"]

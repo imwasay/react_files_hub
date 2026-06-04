@@ -9,8 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
-#  --no-cache-dir
+
+# Install PyTorch with CPU wheels (required for sentence-transformers)
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
+
+# Install other requirements, using the CPU whl index as fallback for transitives
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
 COPY . .
 
 EXPOSE 8000

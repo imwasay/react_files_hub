@@ -46,13 +46,15 @@ def admin_system(db: Session = Depends(get_db_dep), _: User = Depends(require_ad
     # Disk usage per mapped root (only those accessible from inside container)
     roots_info = []
     for r in db.query(MappedRoot).all():
+        is_self = settings.self_node_id and r.node.node_id == settings.self_node_id
+        accessible = os.path.isdir(r.real_path) if is_self else (r.node.status == "online")
         info = {
             "root_id": r.id,
             "logical_name": r.logical_name,
             "real_path": r.real_path,
-            "accessible": os.path.isdir(r.real_path),
+            "accessible": accessible,
         }
-        if info["accessible"]:
+        if is_self and accessible:
             try:
                 stat = os.statvfs(r.real_path)
                 info["total_bytes"] = stat.f_blocks * stat.f_frsize

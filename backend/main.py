@@ -236,19 +236,20 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 # ── directory and storage fallback routers ────────────────────────────────────────────────────
 if settings.is_directory or settings.is_storage:
     from routers import nodes, roots, files, shares, search, cache, ingest, replica, admin
-    from routers import browse as browse_router, thumbnails, media
-    app.include_router(nodes.router,        prefix="/api/v1/nodes",   tags=["nodes"])
-    app.include_router(roots.router,        prefix="/api/v1/roots",   tags=["roots"])
-    app.include_router(files.router,        prefix="/api/v1/files",   tags=["files"])
-    app.include_router(shares.router,       prefix="/api/v1/shares",  tags=["shares"])
-    app.include_router(search.router,       prefix="/api/v1/search",  tags=["search"])
-    app.include_router(cache.router,        prefix="/api/v1/cache",   tags=["cache"])
-    app.include_router(ingest.router,       prefix="/api/v1/ingest",  tags=["ingest"])
-    app.include_router(replica.router,      prefix="/api/v1/replica", tags=["replica"])
-    app.include_router(admin.router,        prefix="/api/v1/admin",   tags=["admin"])
+    from routers import browse as browse_router, thumbnails, media, internal
+    app.include_router(nodes.router,        prefix="/api/v1/nodes",    tags=["nodes"])
+    app.include_router(roots.router,        prefix="/api/v1/roots",    tags=["roots"])
+    app.include_router(files.router,        prefix="/api/v1/files",    tags=["files"])
+    app.include_router(shares.router,       prefix="/api/v1/shares",   tags=["shares"])
+    app.include_router(search.router,       prefix="/api/v1/search",   tags=["search"])
+    app.include_router(cache.router,        prefix="/api/v1/cache",    tags=["cache"])
+    app.include_router(ingest.router,       prefix="/api/v1/ingest",   tags=["ingest"])
+    app.include_router(replica.router,      prefix="/api/v1/replica",  tags=["replica"])
+    app.include_router(admin.router,        prefix="/api/v1/admin",    tags=["admin"])
     app.include_router(browse_router.router, prefix="/api/v1/browse",  tags=["browse"])
-    app.include_router(thumbnails.router,   prefix="/api/v1/files",   tags=["thumbnails"])
-    app.include_router(media.router,        prefix="/api/v1/files",   tags=["media"])
+    app.include_router(thumbnails.router,   prefix="/api/v1/files",    tags=["thumbnails"])
+    app.include_router(media.router,        prefix="/api/v1/files",    tags=["media"])
+    app.include_router(internal.router,     prefix="/internal",        tags=["internal"])
 
 # ── static files LAST — catches everything not matched above ──────────────────
 if (settings.is_directory or settings.is_storage) and settings.serve_react and os.path.isdir(settings.react_static_path):

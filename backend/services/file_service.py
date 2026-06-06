@@ -87,10 +87,12 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         logger = logging.getLogger(__name__)
         
         for ip in ips:
-            base_url = f"http://{ip}:8001/internal/files"
+            base_url = f"http://{ip}:8000/internal/files"
             try:
                 async with httpx.AsyncClient() as client:
-                    async with client.stream("GET", f"{base_url}?path={serve_path}", headers=headers, timeout=5.0) as r:
+                    from urllib.parse import quote
+                    encoded_path = quote(serve_path, safe="")
+                    async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=headers, timeout=5.0) as r:
                         r.raise_for_status()
                         async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
                             yield chunk

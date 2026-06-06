@@ -29,39 +29,74 @@ const api = axios.create({
 
 // ── Bootstrap: discover dir node URL on first load ───────────────────────────
 export async function bootstrapApiClient(): Promise<void> {
+  // Step 1: Try to reach the config endpoint of the server serving this page.
+  // This gives us authoritative topology info.
   try {
-    // Use a plain fetch — api client isn't ready yet
     const res = await fetch('/api/v1/config', { signal: AbortSignal.timeout(3000) })
-    if (!res.ok) return
-    const cfg = await res.json()
+    if (res.ok) {
+      const cfg = await res.json()
 
-    if (cfg.dir_node_url) {
-      // We're being served from a storage node — redirect API to dir node
-      localStorage.setItem(STORAGE_KEY, cfg.dir_node_url)
-      api.defaults.baseURL = `${cfg.dir_node_url}/api/v1`
-    } else {
-      // We're on the directory node itself — use relative paths
-      localStorage.removeItem(STORAGE_KEY)
-      api.defaults.baseURL = '/api/v1'
+      if (cfg.dir_node_url) {
+        // We're on a storage node — try to reach the dir node before committing.
+        // We probe /config and verify node_mode === 'directory' to guard against
+        // DNS round-robin resolving back to this same storage node (same domain,
+        // multiple A records). A /health check alone would give a false positive.
+        const dirUrl = cfg.dir_node_url.replace(/\/$/, '')
+        try {
+          const probe = await fetch(`${dirUrl}/api/v1/config`, { signal: AbortSignal.timeout(3000) })
+          if (probe.ok) {
+            const probeCfg = await probe.json()
+            if (probeCfg.node_mode === 'directory') {
+              // Confirmed real directory node — route to it
+              localStorage.setItem(STORAGE_KEY, dirUrl)
+              api.defaults.baseURL = `${dirUrl}/api/v1`
+              return
+            }
+          }
+        } catch { /* dir node unreachable */ }
 
-      // Cache storage node public URLs so login can fall back to them
-      // if this directory node goes offline
-      if (cfg.storage_nodes?.length) {
-        const urls: string[] = cfg.storage_nodes
-          .map((n: { node_ip?: string }) => {
-            const ip = (n.node_ip ?? '').split(',')[0].trim()
-            if (!ip) return null
-            return ip.startsWith('http') ? ip : null  // only store full URLs (https://...)
-          })
-          .filter(Boolean) as string[]
-        if (urls.length) localStorage.setItem('fallback_node_urls', JSON.stringify(urls))
+        // Dir node is DOWN or we can't confirm it's directory mode.
+        // Stay on this storage node — clear stale pointer so relative paths work.
+        localStorage.removeItem(STORAGE_KEY)
+        api.defaults.baseURL = '/api/v1'
+      } else {
+        // We're already on the directory node — use relative paths
+        localStorage.removeItem(STORAGE_KEY)
+        api.defaults.baseURL = '/api/v1'
+
+        // Cache storage node URLs for future fallback use
+        if (cfg.storage_nodes?.length) {
+          const urls: string[] = cfg.storage_nodes
+            .map((n: { node_ip?: string }) => {
+              const ip = (n.node_ip ?? '').split(',')[0].trim()
+              if (!ip) return null
+              return ip.startsWith('http') ? ip : null
+            })
+            .filter(Boolean) as string[]
+          if (urls.length) localStorage.setItem('fallback_node_urls', JSON.stringify(urls))
+        }
       }
+      return
     }
-  } catch {
-    // Can't reach config endpoint — use whatever was stored last time
-    const stored = getStoredDirUrl()
-    if (stored) api.defaults.baseURL = `${stored}/api/v1`
+  } catch { /* page server unreachable or timeout */ }
+
+  // Step 2: Page server unreachable. Try fallback nodes to find a live one.
+  const fallbacks = getFallbackNodeUrls()
+  for (const nodeUrl of fallbacks) {
+    try {
+      const probe = await fetch(`${nodeUrl}/api/v1/health`, { signal: AbortSignal.timeout(3000) })
+      if (probe.ok) {
+        // Found a live fallback — route to it and clear old dir node pointer
+        localStorage.removeItem(STORAGE_KEY)
+        api.defaults.baseURL = `${nodeUrl}/api/v1`
+        return
+      }
+    } catch { continue }
   }
+
+  // Step 3: Nothing found — fall back to whatever was last stored
+  const stored = getStoredDirUrl()
+  if (stored) api.defaults.baseURL = `${stored}/api/v1`
 }
 
 /** Storage node fallback URLs — merged from build-time env and cached localStorage.

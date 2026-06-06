@@ -600,3 +600,35 @@ def list_all_shares(db: Session = Depends(get_db_dep), _: User = Depends(require
         }
         for s in shares
     ]
+
+
+@router.post("/fix-logical-paths")
+def fix_logical_paths(db: Session = Depends(get_db_dep), _: User = Depends(require_admin)):
+    """One-shot repair: recompute logical_path for all files using the authoritative
+    logical_name stored in mapped_roots. Fixes stale paths caused by storage nodes
+    using Path.name (basename) instead of the full real_path when pushing syncs."""
+    import os as _os
+    fixed = 0
+    skipped = 0
+
+    roots = db.query(MappedRoot).all()
+    for root in roots:
+        files = db.query(File).filter(File.mapped_root_id == root.id).all()
+        for f in files:
+            real_path = f.real_path
+            if not real_path:
+                skipped += 1
+                continue
+            # Derive expected logical_path from the root's authoritative logical_name
+            # and the file's position relative to real_path root
+            try:
+                rel = _os.path.relpath(real_path, root.real_path)
+                expected = f"{root.logical_name}/{rel}".replace("\\", "/")
+                if f.logical_path != expected:
+                    f.logical_path = expected
+                    fixed += 1
+            except Exception:
+                skipped += 1
+
+    db.commit()
+    return {"fixed": fixed, "skipped": skipped}

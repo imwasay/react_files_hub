@@ -84,7 +84,7 @@ async def _initial_scan():
     """On startup scan all MAPPED_ROOTS env var paths and push to directory node."""
     changes = []
     for root_path in settings.mapped_roots_list:
-        logical_name = Path(root_path).name
+        logical_name = root_path  # use full path; dir node rewrites using its registered logical_name
         if not os.path.isdir(root_path):
             logger.warning("Mapped root not found: %s", root_path)
             continue
@@ -115,7 +115,7 @@ async def start_watcher():
             changes = []
             for change_type, path in batch:
                 root_path = next((r for r in paths if path.startswith(r)), paths[0])
-                logical_name = Path(root_path).name
+                logical_name = root_path  # use full path; dir node rewrites using its registered logical_name
                 try:
                     if change_type == Change.deleted:
                         changes.append({

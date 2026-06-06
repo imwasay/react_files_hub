@@ -267,18 +267,24 @@ def sync_files(
                 File.real_path == change.real_path,
             ).first()
 
-            root = db.query(MappedRoot).filter(
+            all_roots = db.query(MappedRoot).filter(
                 MappedRoot.node_id == node.id,
                 MappedRoot.owner_id == node.owner_id,
-            ).first()
+            ).all()
+            all_roots.sort(key=lambda x: len(x.real_path), reverse=True)
+            root = next((r for r in all_roots if change.real_path.startswith(r.real_path)), None)
 
             if not root:
-                rejected.append({"path": change.real_path, "reason": "no mapped root found"})
+                rejected.append({"path": change.real_path, "reason": "no mapped root found matching real_path"})
                 continue
+
+            import os
+            rel = os.path.relpath(change.real_path, root.real_path)
+            true_logical_path = f"{root.logical_name}/{rel}".replace("\\", "/")
 
             if f:
                 f.filename = change.filename
-                f.logical_path = change.logical_path
+                f.logical_path = true_logical_path
                 f.mime_type = change.mime_type
                 f.file_type = change.file_type
                 f.size_bytes = change.size_bytes
@@ -292,7 +298,7 @@ def sync_files(
                     node_id=node.id,
                     mapped_root_id=root.id,
                     owner_id=node.owner_id,
-                    logical_path=change.logical_path,
+                    logical_path=true_logical_path,
                     real_path=change.real_path,
                     filename=change.filename,
                     mime_type=change.mime_type,

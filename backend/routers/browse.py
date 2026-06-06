@@ -98,10 +98,12 @@ def browse(
                 .filter(File.mapped_root_id == r.id)
                 .count()
             )
+            # Always strip leading slash so the URL /browse/<path> is clean
+            display_name = r.logical_name.lstrip("/")
             items.append({
-                "name": r.logical_name,
+                "name": display_name,
                 "type": "folder",
-                "path": r.logical_name,
+                "path": display_name,
                 "item_count": file_count,
                 "node_id": r.node.node_id if r.node else None,
                 "node_status": r.node.status if r.node else None,
@@ -117,17 +119,21 @@ def browse(
         }
 
     # ── Deeper levels ──────────────────────────────────────────────────────
-    # Root logical_names can contain slashes (e.g. "WD2T/Studies").
-    # We must match the longest root name that is a prefix of the path.
+    # Root logical_names may start with "/" (e.g. "/mnt/documents") or not.
+    # Normalise both the incoming path and root names to strip leading slashes
+    # so that URL paths (which never have a leading /) always match.
     path_clean = path.strip("/")
     root = None
     root_name = ""
     sub_path = ""
 
-    # Try longest match first — sort root names by length descending
-    for rn in sorted(root_map.keys(), key=len, reverse=True):
+    # Build a normalised lookup: strip leading slash from each logical_name key
+    norm_root_map = {rn.strip("/"): r for rn, r in root_map.items()}
+
+    # Try longest match first — sort normalised root names by length descending
+    for rn in sorted(norm_root_map.keys(), key=len, reverse=True):
         if path_clean == rn or path_clean.startswith(rn + "/"):
-            root = root_map[rn]
+            root = norm_root_map[rn]
             root_name = rn
             sub_path = path_clean[len(rn):].strip("/")
             break
@@ -146,11 +152,15 @@ def browse(
     # Get all files under this root
     base_q = _visible_files_q(db, user).filter(File.mapped_root_id == root.id)
 
-    # The logical_path for a file in root "Movies" at sub/folder/movie.mkv
-    # is stored as "Movies/sub/folder/movie.mkv".
-    # We need to list items at exactly the depth of `path`.
-    prefix = path.rstrip("/") + "/"
-    depth = len(parts)  # number of path segments already traversed
+    # Build the LIKE prefix from the root's authoritative logical_name + the
+    # sub-path the user is navigating into.  We cannot trust `path` directly
+    # because the URL drops any leading slash that logical_name may have.
+    root_logical = root.logical_name  # e.g. "/mnt/documents" or "Movies"
+    # sub_path is what comes after the matched root name in path_clean
+    if sub_path:
+        prefix = root_logical.rstrip("/") + "/" + sub_path + "/"
+    else:
+        prefix = root_logical.rstrip("/") + "/"
 
     # All files whose logical_path starts with our prefix
     candidate_files = base_q.filter(File.logical_path.like(f"{prefix}%")).all()
@@ -175,12 +185,12 @@ def browse(
     # Build response items
     items = []
 
-    # Folders first
+    # Folders first — use path_clean (already slash-stripped) to build the URL path
     for fname, info in sorted(folders.items(), key=lambda x: x[0].lower()):
         items.append({
             "name": fname,
             "type": "folder",
-            "path": f"{path.rstrip('/')}/{fname}",
+            "path": f"{path_clean.rstrip('/')}/{fname}",
             "item_count": info["count"],
             "total_size": info["total_size"],
         })

@@ -12,10 +12,10 @@ from models.user import User
 settings = get_settings()
 
 
-def _make_serve_token(file_id: str, user_id: str) -> str:
-    exp = datetime.utcnow() + timedelta(minutes=5)
+def _make_serve_token(file_id: str, user_id: str, real_path: str) -> str:
+    exp = datetime.utcnow() + timedelta(minutes=10)
     return jwt.encode(
-        {"file_id": file_id, "sub": user_id, "exp": exp},
+        {"file_id": file_id, "sub": user_id, "real_path": real_path, "exp": exp},
         settings.jwt_secret,
         algorithm="HS256",
     )
@@ -29,14 +29,14 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
         for cache_entry in file.cache_entries:
             cache_node = cache_entry.cached_on_node
             if cache_node.status == "online":
-                token = _make_serve_token(file.id, user.id)
+                token = _make_serve_token(file.id, user.id, file.real_path)
                 return {
                     "strategy": "direct",
                     "source": "cache",
                     "direct": {
                         "url": f"https://{cache_node.subdomain}/serve/{token}",
                         "token": token,
-                        "expires_at": (datetime.utcnow() + timedelta(minutes=5)).isoformat(),
+                        "expires_at": (datetime.utcnow() + timedelta(minutes=10)).isoformat(),
                     },
                 }
         # no cache available either
@@ -45,13 +45,25 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
             "reason": f"Node {node.node_id} is offline and no cache copy exists",
         }
 
-    # Always proxy through directory node to avoid SSL errors with direct IP connections
+    # Origin node is online — give the frontend a direct URL to stream from
+    # the storage node, with a signed serve token (no user credentials needed).
+    # The frontend will HEAD-test this and fall back to the proxy if unreachable.
+    ips = [ip.strip() for ip in node.node_ip.split(",") if ip.strip()] if node.node_ip else []
+    token = _make_serve_token(file.id, user.id, file.real_path)
+
+    # Primary: first reachable IP of the storage node
+    direct_url = None
+    if ips:
+        from urllib.parse import quote
+        direct_url = f"http://{ips[0]}:8000/internal/serve?token={token}"
+
     return {
-        "strategy": "proxy",
+        "strategy": "direct" if direct_url else "proxy",
         "source": "origin",
-        "proxy": {
-            "stream_url": f"/api/v1/files/{file.id}/stream",
-        },
+        "direct": {"url": direct_url, "expires_in": 600} if direct_url else None,
+        # Proxy fallback: directory node streams it server-side
+        "proxy": {"stream_url": f"/api/v1/files/{file.id}/stream"},
+        "proxy_fallback": True,
     }
 
 

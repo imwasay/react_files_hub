@@ -116,7 +116,12 @@ async def _sync_once():
         _apply_diff(diff)
         _last_sync = diff.get("server_time", time.time())
         logger.debug("Replica sync complete, server_time=%s", _last_sync)
+        import routers.replica
+        routers.replica.last_sync_error = None
     except Exception as e:
+        import traceback
+        import routers.replica
+        routers.replica.last_sync_error = traceback.format_exc()
         logger.warning("Replica sync failed: %s", e)
 
 

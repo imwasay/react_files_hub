@@ -11,6 +11,23 @@ from middleware.federation_middleware import verify_federation_token
 
 router = APIRouter()
 
+import traceback
+last_sync_error = None
+
+@router.get("/debug")
+def get_debug_info(db: Session = Depends(get_db_dep)):
+    from models.node import Node
+    from models.file import File
+    from models.mapped_root import MappedRoot
+    from models.share import Share
+    return {
+        "nodes": db.query(Node).count(),
+        "files": db.query(File).count(),
+        "roots": db.query(MappedRoot).count(),
+        "shares": db.query(Share).count(),
+        "last_sync_error": last_sync_error,
+    }
+
 
 @router.get("/diff")
 def get_diff(
@@ -41,7 +58,7 @@ def get_diff(
         "files": [
             {
                 "id": f.id,
-                "node_id": f.node.node_id,
+                "node_id": f.node_id,
                 "mapped_root_id": f.mapped_root_id,
                 "logical_path": f.logical_path,
                 "real_path": f.real_path,
@@ -59,7 +76,7 @@ def get_diff(
         "roots": [
             {
                 "id": r.id,
-                "node_id": r.node.node_id,
+                "node_id": r.node_id,
                 "owner_id": r.owner_id,
                 "logical_name": r.logical_name,
                 "real_path": r.real_path,

@@ -43,11 +43,43 @@ export async function bootstrapApiClient(): Promise<void> {
       // We're on the directory node itself — use relative paths
       localStorage.removeItem(STORAGE_KEY)
       api.defaults.baseURL = '/api/v1'
+
+      // Cache storage node public URLs so login can fall back to them
+      // if this directory node goes offline
+      if (cfg.storage_nodes?.length) {
+        const urls: string[] = cfg.storage_nodes
+          .map((n: { node_ip?: string }) => {
+            const ip = (n.node_ip ?? '').split(',')[0].trim()
+            if (!ip) return null
+            return ip.startsWith('http') ? ip : null  // only store full URLs (https://...)
+          })
+          .filter(Boolean) as string[]
+        if (urls.length) localStorage.setItem('fallback_node_urls', JSON.stringify(urls))
+      }
     }
   } catch {
     // Can't reach config endpoint — use whatever was stored last time
     const stored = getStoredDirUrl()
     if (stored) api.defaults.baseURL = `${stored}/api/v1`
+  }
+}
+
+/** Storage node fallback URLs — merged from build-time env and cached localStorage.
+ *  VITE_FALLBACK_NODE_URLS = comma-separated list e.g. "https://alphaservers.dns.army"
+ *  This ensures fallbacks work even on a fresh browser session.
+ */
+export function getFallbackNodeUrls(): string[] {
+  const fromEnv: string[] = (import.meta.env.VITE_FALLBACK_NODE_URLS ?? '')
+    .split(',')
+    .map((u: string) => u.trim())
+    .filter(Boolean)
+  try {
+    const fromStorage: string[] = JSON.parse(localStorage.getItem('fallback_node_urls') ?? '[]')
+    // Merge — env first (always available), then dynamic (may have more)
+    const merged = [...new Set([...fromEnv, ...fromStorage])]
+    return merged
+  } catch {
+    return fromEnv
   }
 }
 

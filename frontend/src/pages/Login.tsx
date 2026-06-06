@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
 import { useAuthStore } from '../store/auth'
+import api, { getFallbackNodeUrls } from '../api/client'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -24,13 +25,70 @@ export default function Login() {
       const user = await getMe()
       setUser(user)
       navigate('/browse')
-    } catch {
-      setError('Invalid email or password')
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+    } catch (err: any) {
+      const hasResponse = Boolean(err?.response)
+      const status = err?.response?.status
+
+      if (hasResponse && (status === 401 || status === 422)) {
+        // Real auth failure — bad credentials
+        triggerShake('Invalid email or password')
+        return
+      }
+
+      // No response = network error = dir node is unreachable
+      // Try each cached storage node as fallback
+      const fallbacks = getFallbackNodeUrls()
+      for (const nodeUrl of fallbacks) {
+        try {
+          const res = await fetch(`${nodeUrl}/api/v1/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+            signal: AbortSignal.timeout(5000),
+          })
+          if (!res.ok) {
+            if (res.status === 401) {
+              triggerShake('Invalid email or password')
+              return
+            }
+            continue
+          }
+          const data = await res.json()
+          // Switch API client to this fallback node for the session
+          localStorage.setItem('dir_node_url', nodeUrl)
+          api.defaults.baseURL = `${nodeUrl}/api/v1`
+          localStorage.setItem('access_token', data.access_token)
+          localStorage.setItem('refresh_token', data.refresh_token)
+          // Fetch user profile from fallback node
+          const meRes = await fetch(`${nodeUrl}/api/v1/auth/me`, {
+            headers: { Authorization: `Bearer ${data.access_token}` },
+          })
+          if (meRes.ok) {
+            const user = await meRes.json()
+            setUser(user)
+            navigate('/browse')
+            return
+          }
+        } catch {
+          continue  // try next fallback
+        }
+      }
+
+      // All nodes failed
+      triggerShake(
+        fallbacks.length
+          ? 'All servers unreachable. Check your connection.'
+          : 'Server unreachable. Check your connection.'
+      )
     } finally {
       setLoading(false)
     }
+  }
+
+  const triggerShake = (msg: string) => {
+    setError(msg)
+    setShake(true)
+    setTimeout(() => setShake(false), 500)
   }
 
   return (

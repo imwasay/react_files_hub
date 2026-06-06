@@ -200,10 +200,10 @@ async def health():
 @app.get("/api/v1/config")
 async def get_config():
     """Public endpoint. Frontend calls this on startup to learn the mesh topology.
-    
-    Returns this node's identity and, if this is a directory node, the list of
-    all registered storage nodes and their multi-route addresses. The frontend
-    uses this to know where to fall back if the directory node goes offline.
+
+    When served from a storage node, returns dir_node_url so the frontend
+    can redirect all API calls to the actual directory node.
+    When served from the directory node, dir_node_url is absent (already there).
     """
     config = {
         "node_mode": settings.node_mode,
@@ -211,9 +211,12 @@ async def get_config():
         "node_ip": settings.node_ip,
         "version": settings.node_version,
     }
-    
-    # If directory node, include all registered storage nodes so the frontend
-    # can contact them directly as fallback when this node goes offline
+
+    # Storage nodes tell the frontend where the real directory node is
+    if settings.is_storage and settings.dir_node_url:
+        config["dir_node_url"] = settings.dir_node_url.rstrip("/")
+
+    # Directory node: include all online storage nodes
     if settings.is_directory:
         try:
             from database import get_db
@@ -226,7 +229,7 @@ async def get_config():
                 ]
         except Exception:
             config["storage_nodes"] = []
-    
+
     return config
 
 # ── auth ──────────────────────────────────────────────────────────────────────

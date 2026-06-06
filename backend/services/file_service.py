@@ -51,11 +51,15 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
     ips = [ip.strip() for ip in node.node_ip.split(",") if ip.strip()] if node.node_ip else []
     token = _make_serve_token(file.id, user.id, file.real_path)
 
-    # Primary: first reachable IP of the storage node
+    # Primary: find the best URL for the frontend to hit directly
     direct_url = None
     if ips:
-        from urllib.parse import quote
-        direct_url = f"http://{ips[0]}:8000/internal/serve?token={token}"
+        # Prefer HTTPS public domains for the frontend to avoid Mixed Content
+        best_ip = next((ip for ip in ips if ip.startswith("https://")), ips[0])
+        if best_ip.startswith("http://") or best_ip.startswith("https://"):
+            direct_url = f"{best_ip}/internal/serve?token={token}"
+        else:
+            direct_url = f"http://{best_ip}:8000/internal/serve?token={token}"
 
     return {
         "strategy": "direct" if direct_url else "proxy",
@@ -99,7 +103,11 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         logger = logging.getLogger(__name__)
         
         for ip in ips:
-            base_url = f"http://{ip}:8000/internal/files"
+            if ip.startswith("http://") or ip.startswith("https://"):
+                base_url = f"{ip}/internal/files"
+            else:
+                base_url = f"http://{ip}:8000/internal/files"
+                
             try:
                 async with httpx.AsyncClient() as client:
                     from urllib.parse import quote

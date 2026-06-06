@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth'
 import { getMe } from './api/auth'
+import { bootstrapApiClient } from './api/client'
 import './store/preferences' // initialize theme from localStorage
 import Login from './pages/Login'
 import Browse from './pages/Browse'
@@ -60,17 +61,26 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('access_token')
-    if (token) {
-      getMe()
-        .then(user => { setUser(user); setHydrated() })
-        .catch(() => {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          setHydrated()
-        })
-    } else {
-      setHydrated()
-    }
+    // Resolve which server is the directory node, then hydrate auth
+    bootstrapApiClient().then(() => {
+      if (token) {
+        getMe()
+          .then(user => { setUser(user); setHydrated() })
+          .catch((err) => {
+            // Only clear tokens if the server explicitly rejected them (401).
+            // A network error (server down) has no err.response — keep tokens
+            // so the user is still logged in when the server comes back up.
+            const isAuthFailure = err?.response?.status === 401
+            if (isAuthFailure) {
+              localStorage.removeItem('access_token')
+              localStorage.removeItem('refresh_token')
+            }
+            setHydrated()
+          })
+      } else {
+        setHydrated()
+      }
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

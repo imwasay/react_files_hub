@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # storage mode
     node_id: Optional[str] = None
     dir_node_ip: Optional[str] = None
+    dir_node_url: Optional[str] = None       # public URL of dir node e.g. https://file.kingservers.dns.army
     mapped_roots: str = ""
     replica_poll_base: int = 60
     replica_poll_jitter_max: int = 30

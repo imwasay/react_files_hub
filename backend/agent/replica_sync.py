@@ -32,7 +32,43 @@ async def _fetch_diff(since: float) -> dict:
 
 
 def _apply_diff(diff: dict):
+    from models.node import Node
+    from datetime import datetime
     with get_db() as db:
+        for n_data in diff.get("nodes", []):
+            existing = db.query(Node).filter(Node.id == n_data["id"]).first()
+            last_seen_dt = datetime.utcfromtimestamp(n_data["last_seen"]) if n_data.get("last_seen") else None
+            if existing:
+                existing.node_id = n_data["node_id"]
+                existing.node_ip = n_data["node_ip"]
+                existing.status = n_data["status"]
+                existing.last_seen = last_seen_dt
+            else:
+                db.add(Node(
+                    id=n_data["id"],
+                    node_id=n_data["node_id"],
+                    node_ip=n_data["node_ip"],
+                    host_os=n_data["host_os"],
+                    status=n_data["status"],
+                    owner_id=n_data["owner_id"],
+                    last_seen=last_seen_dt,
+                ))
+
+        for r_data in diff.get("roots", []):
+            existing = db.query(MappedRoot).filter(MappedRoot.id == r_data["id"]).first()
+            if existing:
+                existing.logical_name = r_data["logical_name"]
+                existing.is_media_library = r_data["is_media_library"]
+            else:
+                db.add(MappedRoot(
+                    id=r_data["id"],
+                    node_id=r_data["node_id"],
+                    owner_id=r_data["owner_id"],
+                    logical_name=r_data["logical_name"],
+                    real_path=r_data.get("real_path", ""),
+                    is_media_library=r_data["is_media_library"],
+                ))
+
         for f_data in diff.get("files", []):
             existing = db.query(File).filter(File.id == f_data["id"]).first()
             if existing:
@@ -43,7 +79,21 @@ def _apply_diff(diff: dict):
                 existing.size_bytes = f_data["size_bytes"]
                 existing.checksum = f_data["checksum"]
                 existing.index_status = f_data["index_status"]
-            # storage replica only tracks metadata — no insert of unknown files
+            else:
+                db.add(File(
+                    id=f_data["id"],
+                    node_id=f_data["node_id"],
+                    mapped_root_id=f_data.get("mapped_root_id"),
+                    owner_id=f_data.get("owner_id"),
+                    logical_path=f_data["logical_path"],
+                    real_path=f_data.get("real_path", ""),
+                    filename=f_data["filename"],
+                    mime_type=f_data["mime_type"],
+                    file_type=f_data["file_type"],
+                    size_bytes=f_data["size_bytes"],
+                    checksum=f_data["checksum"],
+                    index_status=f_data["index_status"],
+                ))
 
         for s_data in diff.get("shares", []):
             existing = db.query(Share).filter(Share.id == s_data["id"]).first()

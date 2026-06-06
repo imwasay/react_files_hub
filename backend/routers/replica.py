@@ -23,13 +23,28 @@ def get_diff(
     files = db.query(File).filter(File.created_at >= since_dt).all()
     roots = db.query(MappedRoot).filter(MappedRoot.created_at >= since_dt).all()
     shares = db.query(Share).filter(Share.created_at >= since_dt).all()
+    nodes = db.query(Node).all()  # Nodes are small, always sync full list
 
     return {
+        "nodes": [
+            {
+                "id": n.id,
+                "node_id": n.node_id,
+                "node_ip": n.node_ip,
+                "host_os": n.host_os,
+                "status": n.status,
+                "owner_id": n.owner_id,
+                "last_seen": n.last_seen.timestamp() if n.last_seen else None,
+            }
+            for n in nodes
+        ],
         "files": [
             {
                 "id": f.id,
                 "node_id": f.node.node_id,
+                "mapped_root_id": f.mapped_root_id,
                 "logical_path": f.logical_path,
+                "real_path": f.real_path,
                 "filename": f.filename,
                 "mime_type": f.mime_type,
                 "file_type": f.file_type,
@@ -45,7 +60,9 @@ def get_diff(
             {
                 "id": r.id,
                 "node_id": r.node.node_id,
+                "owner_id": r.owner_id,
                 "logical_name": r.logical_name,
+                "real_path": r.real_path,
                 "is_media_library": r.is_media_library,
             }
             for r in roots

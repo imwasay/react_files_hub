@@ -22,7 +22,7 @@ echo -e "${YELLOW}Missing config. Starting setup wizard...${NC}"
 read -p "Enter NODE_ID (e.g. node_king_directory): " NODE_ID
 read -p "Enter SELF_ADDRESSES (comma-separated, e.g. 192.168.1.10:8000,mydir.duckdns.org:8000): " SELF_ADDRESSES
 echo -e "${YELLOW}Suggestion for secrets: run 'openssl rand -hex 32' in another terminal and paste the result.${NC}"
-read -p "Enter MESH_JWT_SECRET: " MESH_JWT_SECRET
+read -p "Enter JWT_SECRET: " JWT_SECRET
 read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
 read -p "Enter ADMIN_USERNAME: " ADMIN_USERNAME
 read -p "Enter ADMIN_PASSWORD: " ADMIN_PASSWORD
@@ -49,7 +49,7 @@ cat <<EOF > .env
 NODE_MODE=directory
 NODE_ID=${NODE_ID}
 SELF_ADDRESSES=${SELF_ADDRESSES}
-MESH_JWT_SECRET=${MESH_JWT_SECRET}
+JWT_SECRET=${JWT_SECRET}
 NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}

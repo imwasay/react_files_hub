@@ -21,8 +21,8 @@ echo -e "${YELLOW}Missing config. Starting setup wizard...${NC}"
 
 read -p "Enter NODE_ID (e.g. node_alice_storage): " NODE_ID
 read -p "Enter SELF_ADDRESSES: " SELF_ADDRESSES
-echo -e "${YELLOW}You must use the same MESH_JWT_SECRET and NODE_FEDERATION_SECRET as the directory node.${NC}"
-read -p "Enter MESH_JWT_SECRET: " MESH_JWT_SECRET
+echo -e "${YELLOW}You must use the same JWT_SECRET and NODE_FEDERATION_SECRET as the directory node.${NC}"
+read -p "Enter JWT_SECRET: " JWT_SECRET
 read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
 read -p "Enter DIRECTORY_NODE_ADDRESSES (comma-separated): " DIRECTORY_NODE_ADDRESSES
 read -p "Enter WATCH_DIRS (comma-separated local paths to share, e.g. /mnt/movies,/home/alice/docs): " WATCH_DIRS
@@ -33,7 +33,7 @@ cat <<EOF > .env
 NODE_MODE=storage
 NODE_ID=${NODE_ID}
 SELF_ADDRESSES=${SELF_ADDRESSES}
-MESH_JWT_SECRET=${MESH_JWT_SECRET}
+JWT_SECRET=${JWT_SECRET}
 NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
 DIRECTORY_NODE_ADDRESSES=${DIRECTORY_NODE_ADDRESSES}
 EOF

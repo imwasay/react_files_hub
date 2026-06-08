@@ -26,12 +26,13 @@ read -p "Enter JWT_SECRET: " JWT_SECRET
 read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
 read -p "Enter DIRECTORY_NODE_ADDRESSES (comma-separated): " DIRECTORY_NODE_ADDRESSES
 read -p "Enter WATCH_DIRS (comma-separated local paths to share, e.g. /mnt/movies,/home/alice/docs): " WATCH_DIRS
-read -p "Enter HOST_PORT (default: 8001): " HOST_PORT
-HOST_PORT=${HOST_PORT:-8001}
+read -p "Enter HOST_PORT (default: 8000): " HOST_PORT
+HOST_PORT=${HOST_PORT:-8000}
 
 cat <<EOF > .env
 NODE_MODE=storage
 NODE_ID=${NODE_ID}
+SELF_NODE_ID=${NODE_ID}
 SELF_ADDRESSES=${SELF_ADDRESSES}
 JWT_SECRET=${JWT_SECRET}
 NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
@@ -52,7 +53,7 @@ services:
     volumes:
 $VOLUMES_YAML
     ports:
-      - "${HOST_PORT}:8000"
+      - "127.0.0.1:${HOST_PORT}:8000"
     restart: unless-stopped
 EOF
 

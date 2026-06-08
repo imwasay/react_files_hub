@@ -61,10 +61,12 @@ def _visible_files_q(db: Session, user: User):
             ),
         )
     )
+    owned_root_ids = db.query(MappedRoot.id).filter(MappedRoot.owner_id == user.id)
     return db.query(File).filter(
         or_(
             File.owner_id == user.id,
             File.mapped_root_id.in_(shared_root_ids),
+            File.mapped_root_id.in_(owned_root_ids),
         )
     )
 

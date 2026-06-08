@@ -64,9 +64,15 @@ def search_files(
         ).all()
     ]
     
-    # User can see files they own OR files in mapped roots shared with them
-    if shared_root_ids:
-        root_ids_str = ",".join(f"'{rid}'" for rid in shared_root_ids)
+    # User can see files they own, files in roots they own, or files in roots shared with them
+    owned_root_ids = [
+        r[0] for r in db.query(MappedRoot.id).filter(MappedRoot.owner_id == user_id).all()
+    ]
+    
+    all_allowed_roots = set(shared_root_ids + owned_root_ids)
+    
+    if all_allowed_roots:
+        root_ids_str = ",".join(f"'{rid}'" for rid in all_allowed_roots)
         extra_where = [f"(f.owner_id = :user_id OR f.mapped_root_id IN ({root_ids_str}))"]
     else:
         extra_where = ["f.owner_id = :user_id"]
@@ -134,11 +140,12 @@ def search_files(
         from sqlalchemy import or_
         q_obj = db.query(File).filter(File.filename.ilike(f"%{q}%"))
         
-        if shared_root_ids:
+        all_allowed_roots = set(shared_root_ids + owned_root_ids)
+        if all_allowed_roots:
             q_obj = q_obj.filter(
                 or_(
                     File.owner_id == user_id,
-                    File.mapped_root_id.in_(shared_root_ids),
+                    File.mapped_root_id.in_(all_allowed_roots),
                 )
             )
         else:

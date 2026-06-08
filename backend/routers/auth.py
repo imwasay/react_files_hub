@@ -54,7 +54,19 @@ def register(body: RegisterRequest, db: Session = Depends(get_db_dep)):
 
 @router.post("/login")
 def login(body: LoginRequest, db: Session = Depends(get_db_dep)):
+    import logging
+    from database import _get_db_path
+    logging.info(f"DB PATH: {_get_db_path()}")
+    all_users = db.query(User).all()
+    logging.info(f"ALL USERS IN DB: {[u.email for u in all_users]}")
+    
+    logging.info(f"LOGIN ATTEMPT: email={repr(body.email)} password={repr(body.password)}")
     user = db.query(User).filter(User.email == body.email).first()
+    if user:
+        logging.info(f"USER FOUND IN DB: {user.email}")
+        logging.info(f"PASSWORD MATCH: {pwd.verify(body.password, user.password_hash)}")
+    else:
+        logging.info("USER NOT FOUND IN DB")
     if not user or not pwd.verify(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     user.last_seen = datetime.utcnow()

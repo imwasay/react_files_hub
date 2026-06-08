@@ -24,9 +24,11 @@ def bootstrap_admin_user():
         return
     try:
         with get_db() as db:
-            existing = db.query(User).filter(User.email == settings.admin_email).first()
+            from sqlalchemy import or_
+            existing = db.query(User).filter(or_(User.email == settings.admin_email, User.username == settings.admin_username)).first()
             if existing:
                 existing.username = settings.admin_username
+                existing.email = settings.admin_email
                 existing.password_hash = pwd.hash(settings.admin_password)
                 existing.role = "owner"
                 db.commit()
@@ -255,4 +257,11 @@ if settings.is_directory or settings.is_storage:
 
 # ── static files LAST — catches everything not matched above ──────────────────
 if (settings.is_directory or settings.is_storage) and settings.serve_react and os.path.isdir(settings.react_static_path):
-    app.mount("/", StaticFiles(directory=settings.react_static_path, html=True), name="react")
+    from fastapi.responses import FileResponse
+
+    app.mount("/assets", StaticFiles(directory=os.path.join(settings.react_static_path, "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        index_path = os.path.join(settings.react_static_path, "index.html")
+        return FileResponse(index_path)

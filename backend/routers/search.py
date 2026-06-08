@@ -22,8 +22,8 @@ async def search(
     db: Session = Depends(get_db_dep),
     user: User = Depends(get_current_user),
 ):
-    # Route all requests to our FTS5 search function
-    results, llm_available = search_files(db, user.id, q, file_type, node_id, page, limit)
+    # Route all requests to our search function
+    results, llm_available = search_files(db, user.id, q, type, file_type, node_id, page, limit)
     return {"results": results, "total": len(results), "llm_available": False}
 
 

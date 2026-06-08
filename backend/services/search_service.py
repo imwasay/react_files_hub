@@ -38,25 +38,20 @@ def search_files(
     db: Session,
     user_id: str,
     q: str,
+    search_type: str,
     file_type: Optional[str],
     node_id: Optional[str],
     page: int,
     limit: int,
 ) -> Tuple[list, bool]:
     """
-    Search files using SQLite FTS5 with BM25 ranking.
-
-    1. Tries FTS5 MATCH with bm25() ordering.
-    2. On any exception (malformed query, table missing, etc.) falls back
-       to a simple LIKE filename search.
-    3. Returns a list of full file objects — same shape as browse returns —
-       so the frontend can render search results without a separate adapter.
+    Search files using SQLite FTS5 with BM25 ranking or LIKE fallback.
     """
     offset = (page - 1) * limit
 
     # ── Build optional filter clauses ─────────────────────────────────────────
     from models.share import Share
-    from sqlalchemy import or_
+    from sqlalchemy import or_, text
 
     shared_root_ids = [
         r[0] for r in db.query(Share.mapped_root_id).filter(
@@ -66,6 +61,7 @@ def search_files(
     ]
     
     # User can see files they own, files in roots they own, or files in roots shared with them
+    from models.mapped_root import MappedRoot
     owned_root_ids = [
         r[0] for r in db.query(MappedRoot.id).filter(MappedRoot.owner_id == user_id).all()
     ]
@@ -105,17 +101,20 @@ def search_files(
 
     # ── Step 1: FTS5 MATCH ────────────────────────────────────────────────────
     try:
+        if search_type == "filename":
+            raise ValueError("Skipping FTS5 because search_type is filename")
+            
         fts_sql = f"""
-            SELECT f.id
+            SELECT DISTINCT f.id
             FROM file_fts
             JOIN files f ON file_fts.file_id = f.id
             WHERE file_fts MATCH :query
               AND {where_sql}
-            ORDER BY bm25(file_fts)   -- bm25() returns negatives; lower = better match
+            ORDER BY bm25(file_fts)
             LIMIT :limit OFFSET :offset
         """
         rows = db.execute(text(fts_sql), params).fetchall()
-        file_ids = [row.id for row in rows]
+        file_ids = [row[0] for row in rows]
 
         if file_ids:
             # Preserve BM25 ordering by loading ORM objects in the same order

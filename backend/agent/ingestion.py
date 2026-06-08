@@ -157,12 +157,14 @@ def index_file(
     """
     extracted_text = _extract_text(real_path, mime_type, filename)
 
-    sql = text("""
-        INSERT OR REPLACE INTO file_fts
+    sql_del = text("DELETE FROM file_fts WHERE file_id = :file_id")
+    sql_ins = text("""
+        INSERT INTO file_fts
             (file_id, filename, relative_path, mime_type, extracted_text)
         VALUES
             (:file_id, :filename, :relative_path, :mime_type, :extracted_text)
     """)
+    
     params = {
         "file_id": file_id,
         "filename": filename,
@@ -173,7 +175,8 @@ def index_file(
 
     if db_session is not None:
         try:
-            db_session.execute(sql, params)
+            db_session.execute(sql_del, {"file_id": file_id})
+            db_session.execute(sql_ins, params)
             db_session.commit()
             logger.debug("FTS indexed (via session): %s", filename)
         except Exception as e:
@@ -182,7 +185,8 @@ def index_file(
         try:
             from database import SessionLocal
             with SessionLocal() as db:
-                db.execute(sql, params)
+                db.execute(sql_del, {"file_id": file_id})
+                db.execute(sql_ins, params)
                 db.commit()
             logger.debug("FTS indexed (own session): %s", filename)
         except Exception as e:

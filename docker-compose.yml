@@ -12,8 +12,11 @@ services:
         # Bake Hassan's URL into the frontend so fresh sessions can find the fallback
         VITE_FALLBACK_NODE_URLS: "https://alphaservers.dns.army"
     env_file: .env
+    environment:
+      # Pass NODE_MODE explicitly if you want to override the .env file
+      - NODE_MODE=${NODE_MODE:-directory}
     volumes:
-      - ./data:/data
+      - ./data:/app/data
       - /etc/letsencrypt:/certs:ro
       # ── Drive mounts ────────────────────────────────────────────────────
       # Add your actual paths here. Examples:
@@ -31,3 +34,11 @@ services:
       timeout: 10s
       retries: 3
 
+  frontend:
+    # Optional standalone frontend serving (e.g. via nginx)
+    profiles: ["frontend"]
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    restart: unless-stopped

@@ -20,12 +20,12 @@ fi
 echo -e "${YELLOW}Missing config. Starting setup wizard...${NC}"
 
 read -p "Enter NODE_ID (e.g. node_alice_storage): " NODE_ID
-read -p "Enter SELF_ADDRESSES: " SELF_ADDRESSES
+read -p "Enter NODE_IP: " NODE_IP
 echo -e "${YELLOW}You must use the same JWT_SECRET and NODE_FEDERATION_SECRET as the directory node.${NC}"
 read -p "Enter JWT_SECRET: " JWT_SECRET
 read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
-read -p "Enter DIRECTORY_NODE_ADDRESSES (comma-separated): " DIRECTORY_NODE_ADDRESSES
-read -p "Enter WATCH_DIRS (comma-separated local paths to share, e.g. /mnt/movies,/home/alice/docs): " WATCH_DIRS
+read -p "Enter DIR_NODE_IP (comma-separated): " DIR_NODE_IP
+read -p "Enter MAPPED_ROOTS (comma-separated local paths to share, e.g. /mnt/movies,/home/alice/docs): " MAPPED_ROOTS
 read -p "Enter HOST_PORT (default: 8000): " HOST_PORT
 HOST_PORT=${HOST_PORT:-8000}
 
@@ -33,14 +33,15 @@ cat <<EOF > .env
 NODE_MODE=storage
 NODE_ID=${NODE_ID}
 SELF_NODE_ID=${NODE_ID}
-SELF_ADDRESSES=${SELF_ADDRESSES}
+NODE_IP=${NODE_IP}
 JWT_SECRET=${JWT_SECRET}
 NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
-DIRECTORY_NODE_ADDRESSES=${DIRECTORY_NODE_ADDRESSES}
+DIR_NODE_IP=${DIR_NODE_IP}
+MAPPED_ROOTS=${MAPPED_ROOTS}
 EOF
 
 VOLUMES_YAML="      - ./data:/data"
-IFS=',' read -ra DIRS <<< "$WATCH_DIRS"
+IFS=',' read -ra DIRS <<< "$MAPPED_ROOTS"
 for dir in "${DIRS[@]}"; do
     VOLUMES_YAML+=$'\n'"      - ${dir}:${dir}:ro"
 done

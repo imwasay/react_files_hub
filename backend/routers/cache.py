@@ -115,7 +115,7 @@ def cache_status(
 
     return {
         "budget_bytes": config.budget_bytes if config else 0,
-        "used_bytes": config.used_bytes if config else 0,
+        "used_bytes": sum((e.size_bytes or 0) for e in entries),
         "eviction_policy": config.eviction_policy if config else "lru",
         "cached_files": [
             {
@@ -139,7 +139,7 @@ def admin_nodes(db: Session = Depends(get_db_dep), user: User = Depends(require_
             "status": n.status,
             "last_seen": n.last_seen,
             "cache_budget": n.cache_config.budget_bytes if n.cache_config else 0,
-            "cache_used": n.cache_config.used_bytes if n.cache_config else 0,
+            "cache_used": sum((c.size_bytes or 0) for c in n.cache_entries),
         }
         for n in nodes
     ]

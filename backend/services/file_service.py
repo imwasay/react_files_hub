@@ -72,7 +72,7 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
 
 
 async def _bg_download_file(file_id, file_size_bytes, file_real_path, node_id, ips, cache_path, self_node_db_id):
-    if not file_size_bytes or file_size_bytes > 500 * 1024 * 1024:
+    if not file_size_bytes or file_size_bytes > 10 * 1024 * 1024 * 1024:  # 10 GB
         return
     import httpx, aiofiles, urllib.parse, os, uuid
     tmp_path = cache_path + ".tmp"
@@ -213,7 +213,7 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
             return
 
         # 2. Not fully cached — spawn background downloader (if small enough)
-        if self_node_db_id and file.size_bytes and file.size_bytes <= 500 * 1024 * 1024:
+        if self_node_db_id and file.size_bytes and file.size_bytes <= 10 * 1024 * 1024 * 1024:
             import asyncio
             asyncio.create_task(_bg_download_file(file.id, file.size_bytes, file.real_path, serve_node.node_id, ips, cache_path, self_node_db_id))
 
@@ -254,7 +254,7 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         
         if not success:
             logger.error("Failed to reach storage node %s on any configured IP", serve_node.node_id)
-            raise RuntimeError("Failed to reach storage node on any configured IP")
+            return  # End stream prematurely instead of crashing ASGI
 
     status_code = 206 if range_header else 200
     headers = {

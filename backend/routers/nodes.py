@@ -140,7 +140,7 @@ def list_nodes(
             "status": n.status,
             "owner": n.owner.username,
             "cache_budget_bytes": n.cache_config.budget_bytes if n.cache_config else 0,
-            "cache_used_bytes": n.cache_config.used_bytes if n.cache_config else 0,
+            "cache_used_bytes": sum((c.size_bytes or 0) for c in n.cache_entries),
             "last_seen": n.last_seen,
         }
         for n in nodes
@@ -160,5 +160,5 @@ def node_status(
         "node_id": node.node_id,
         "status": node.status,
         "last_seen": node.last_seen,
-        "cache_used_bytes": node.cache_config.used_bytes if node.cache_config else 0,
+        "cache_used_bytes": sum((c.size_bytes or 0) for c in node.cache_entries),
     }

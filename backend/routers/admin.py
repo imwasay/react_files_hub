@@ -191,9 +191,9 @@ def list_nodes(db: Session = Depends(get_db_dep), _: User = Depends(require_admi
             "last_seen": n.last_seen,
             "owner": n.owner.username if n.owner else None,
             "cache_budget": n.cache_config.budget_bytes if n.cache_config else 0,
-            "cache_used": n.cache_config.used_bytes if n.cache_config else 0,
+            "cache_used": sum((c.size_bytes or 0) for c in n.cache_entries),
             "cache_budget_bytes": n.cache_config.budget_bytes if n.cache_config else 0,
-            "cache_used_bytes": n.cache_config.used_bytes if n.cache_config else 0,
+            "cache_used_bytes": sum((c.size_bytes or 0) for c in n.cache_entries),
             "root_count": len(n.mapped_roots),
             "file_count": len(n.files),
         }

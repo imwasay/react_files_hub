@@ -126,10 +126,17 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
 
     db = SessionLocal()
     try:
-        cache_entry = db.query(FileCache).filter(
-            FileCache.file_id == file.id,
-            FileCache.cached_on_node_id == settings.self_node_id
-        ).first()
+        from models.node import Node
+        self_node = db.query(Node).filter(Node.node_id == settings.self_node_id).first()
+        self_node_db_id = self_node.id if self_node else None
+
+        cache_entry = None
+        if self_node_db_id:
+            cache_entry = db.query(FileCache).filter(
+                FileCache.file_id == file.id,
+                FileCache.cached_on_node_id == self_node_db_id
+            ).first()
+
         cached_bytes = cache_entry.size_bytes if cache_entry else 0
         if cached_bytes > 0 and not os.path.isfile(cache_path):
             cached_bytes = 0
@@ -199,19 +206,19 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
                         finally:
                             if cache_f:
                                 await cache_f.close()
-                                if new_cached_bytes > cached_bytes:
+                                if new_cached_bytes > cached_bytes and self_node_db_id:
                                     db_update = SessionLocal()
                                     try:
                                         ce = db_update.query(FileCache).filter(
                                             FileCache.file_id == file.id,
-                                            FileCache.cached_on_node_id == settings.self_node_id
+                                            FileCache.cached_on_node_id == self_node_db_id
                                         ).first()
                                         if not ce:
                                             import uuid
                                             ce = FileCache(
                                                 id=str(uuid.uuid4()),
                                                 file_id=file.id,
-                                                cached_on_node_id=settings.self_node_id,
+                                                cached_on_node_id=self_node_db_id,
                                                 encrypted_path=cache_path,
                                                 checksum="",
                                                 size_bytes=new_cached_bytes

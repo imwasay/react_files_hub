@@ -71,16 +71,16 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
     }
 
 
-async def _bg_download_file(file, ips, cache_path, self_node_db_id):
-    if not file.size_bytes or file.size_bytes > 500 * 1024 * 1024:
+async def _bg_download_file(file_id, file_size_bytes, file_real_path, node_id, ips, cache_path, self_node_db_id):
+    if not file_size_bytes or file_size_bytes > 500 * 1024 * 1024:
         return
     import httpx, aiofiles, urllib.parse, os, uuid
     tmp_path = cache_path + ".tmp"
     if os.path.exists(tmp_path) or os.path.exists(cache_path):
         return
     
-    encoded_path = urllib.parse.quote(file.real_path)
-    req_headers = {"X-Federation-Token": _make_internal_token(file.node.node_id)}
+    encoded_path = urllib.parse.quote(file_real_path)
+    req_headers = {"X-Federation-Token": _make_internal_token(node_id)}
     
     async with httpx.AsyncClient() as client:
         for ip in ips:
@@ -96,12 +96,12 @@ async def _bg_download_file(file, ips, cache_path, self_node_db_id):
                 from models.file_cache import FileCache
                 db = SessionLocal()
                 try:
-                    ce = db.query(FileCache).filter(FileCache.file_id == file.id, FileCache.cached_on_node_id == self_node_db_id).first()
+                    ce = db.query(FileCache).filter(FileCache.file_id == file_id, FileCache.cached_on_node_id == self_node_db_id).first()
                     if not ce:
-                        ce = FileCache(id=str(uuid.uuid4()), file_id=file.id, cached_on_node_id=self_node_db_id, encrypted_path=cache_path, checksum="", size_bytes=file.size_bytes)
+                        ce = FileCache(id=str(uuid.uuid4()), file_id=file_id, cached_on_node_id=self_node_db_id, encrypted_path=cache_path, checksum="", size_bytes=file_size_bytes)
                         db.add(ce)
                     else:
-                        ce.size_bytes = file.size_bytes
+                        ce.size_bytes = file_size_bytes
                     db.commit()
                 except Exception as e:
                     import logging
@@ -215,7 +215,7 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         # 2. Not fully cached — spawn background downloader (if small enough)
         if self_node_db_id and file.size_bytes and file.size_bytes <= 500 * 1024 * 1024:
             import asyncio
-            asyncio.create_task(_bg_download_file(file, ips, cache_path, self_node_db_id))
+            asyncio.create_task(_bg_download_file(file.id, file.size_bytes, file.real_path, serve_node.node_id, ips, cache_path, self_node_db_id))
 
         # 3. Proxy the current request directly from origin (no inline caching)
         fetch_range = f"bytes={current_offset}-"
@@ -230,6 +230,7 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         success = False
         for ip in ips:
             base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
+            yielded_any = False
             try:
                 async with httpx.AsyncClient() as client:
                     from urllib.parse import quote
@@ -239,9 +240,15 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
                         r.raise_for_status()
                         async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
                             yield chunk
+                            yielded_any = True
                 success = True
                 break  # Stream completed successfully
             except Exception as e:
+                import asyncio
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                if yielded_any or e.__class__.__name__ in ("ClientDisconnect", "ConnectionClosed"):
+                    raise  # Client disconnected or dropped mid-stream, cannot retry
                 logger.warning("Proxy stream failed via IP %s: %s", ip, e)
                 continue
         

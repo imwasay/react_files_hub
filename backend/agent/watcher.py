@@ -82,27 +82,31 @@ async def _push_changes(changes: list):
 
 async def _initial_scan():
     """On startup scan all MAPPED_ROOTS env var paths and push to directory node."""
-    changes = []
-    for root_path in settings.mapped_roots_list:
-        logical_name = root_path  # use full path; dir node rewrites using its registered logical_name
-        if not os.path.isdir(root_path):
-            logger.warning("Mapped root not found: %s", root_path)
-            continue
-        for dirpath, _, filenames in os.walk(root_path):
-            for fname in filenames:
-                full = os.path.join(dirpath, fname)
-                try:
-                    changes.append(_build_change("add", full, root_path, logical_name))
-                except Exception as e:
-                    logger.warning("Skipping %s: %s", full, e)
+    def _do_scan():
+        changes = []
+        for root_path in settings.mapped_roots_list:
+            logical_name = root_path
+            if not os.path.isdir(root_path):
+                logger.warning("Mapped root not found: %s", root_path)
+                continue
+            for dirpath, _, filenames in os.walk(root_path):
+                for fname in filenames:
+                    full = os.path.join(dirpath, fname)
+                    try:
+                        changes.append(_build_change("add", full, root_path, logical_name))
+                    except Exception as e:
+                        logger.warning("Skipping %s: %s", full, e)
+        return changes
+        
+    loop = asyncio.get_event_loop()
+    changes = await loop.run_in_executor(None, _do_scan)
     await _push_changes(changes)
 
 
 async def start_watcher():
     """Storage node watcher — pushes via HTTP to directory node."""
-    await _initial_scan()
-
     async def _watch():
+        await _initial_scan()
         from watchfiles import awatch, Change
         paths = [p for p in settings.mapped_roots_list if os.path.isdir(p)]
         if not paths:

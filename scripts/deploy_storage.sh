@@ -21,9 +21,9 @@ echo -e "${YELLOW}Missing config. Starting setup wizard...${NC}"
 
 read -p "Enter NODE_ID (e.g. node_alice_storage): " NODE_ID
 read -p "Enter NODE_IP: " NODE_IP
-echo -e "${YELLOW}You must use the same JWT_SECRET and NODE_FEDERATION_SECRET as the directory node.${NC}"
+echo -e "${YELLOW}You must use the same JWT_SECRET and FEDERATION_TOKEN as the directory node.${NC}"
 read -p "Enter JWT_SECRET: " JWT_SECRET
-read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
+read -p "Enter FEDERATION_TOKEN: " FEDERATION_TOKEN
 read -p "Enter DIR_NODE_IP (comma-separated): " DIR_NODE_IP
 read -p "Enter MAPPED_ROOTS (comma-separated local paths to share, e.g. /mnt/movies,/home/alice/docs): " MAPPED_ROOTS
 read -p "Enter HOST_PORT (default: 8000): " HOST_PORT
@@ -35,7 +35,7 @@ NODE_ID=${NODE_ID}
 SELF_NODE_ID=${NODE_ID}
 NODE_IP=${NODE_IP}
 JWT_SECRET=${JWT_SECRET}
-NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
+FEDERATION_TOKEN=${FEDERATION_TOKEN}
 DIR_NODE_IP=${DIR_NODE_IP}
 MAPPED_ROOTS=${MAPPED_ROOTS}
 EOF

@@ -40,9 +40,14 @@ async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, lis
         
         return r_meta.json(), r_users.json()
 
-def _apply_peer_diff(files_data: list, users_data: list) -> int:
+def _apply_peer_diff(files_data: list, users_data: list) -> tuple[int, list]:
     applied = 0
+    files_to_cache = []
     with get_db() as db:
+        # Get self_node
+        self_node = db.query(Node).filter(Node.node_id == settings.self_node_id).first()
+        self_node_db_id = self_node.id if self_node else None
+
         # Sync users first
         for u_data in users_data:
             existing_user = db.query(User).filter(User.username == u_data["username"]).first()
@@ -159,8 +164,26 @@ def _apply_peer_diff(files_data: list, users_data: list) -> int:
                     modified_at=modified_dt
                 ))
             applied += 1
+            
+            # Queue for pre-caching
+            if self_node_db_id and f_data.get("size_bytes") and f_data.get("size_bytes") <= 10 * 1024 * 1024 * 1024:
+                cache_dir = "/data/cache"
+                os.makedirs(cache_dir, exist_ok=True)
+                cache_path = os.path.join(cache_dir, f_data["id"])
+                ips = [ip.strip() for ip in (node.node_ip or "").split(",") if ip.strip()]
+                if ips:
+                    files_to_cache.append({
+                        "file_id": f_data["id"],
+                        "file_size_bytes": f_data["size_bytes"],
+                        "file_real_path": f_data["real_path"],
+                        "node_id": node.node_id,
+                        "ips": ips,
+                        "cache_path": cache_path,
+                        "self_node_db_id": self_node_db_id
+                    })
+
         db.commit()
-    return applied
+    return applied, files_to_cache
 
 async def sync_peer(peer_node_id: str, addresses: list[str]):
     global _last_sync_by_peer
@@ -171,9 +194,16 @@ async def sync_peer(peer_node_id: str, addresses: list[str]):
         try:
             logger.info("Syncing metadata from peer %s via %s (since=%s)", peer_node_id, addr, since)
             files_data, users_data = await _fetch_diff_from_peer(addr, since)
-            count = _apply_peer_diff(files_data, users_data)
+            count, files_to_cache = _apply_peer_diff(files_data, users_data)
             _last_sync_by_peer[addr] = start_time
             logger.info("Successfully synced %d files from peer %s via %s", count, peer_node_id, addr)
+            
+            # Fire off background cache downloads for all new/modified files
+            if files_to_cache:
+                from services.file_service import _bg_download_file
+                for item in files_to_cache:
+                    asyncio.create_task(_bg_download_file(**item))
+                    
             return True
         except Exception as e:
             logger.warning("Failed to sync from peer %s via %s: %s", peer_node_id, addr, e)

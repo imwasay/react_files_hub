@@ -54,7 +54,23 @@ def search_files(
     offset = (page - 1) * limit
 
     # ── Build optional filter clauses ─────────────────────────────────────────
-    extra_where = ["f.owner_id = :user_id"]
+    from models.share import Share
+    from sqlalchemy import or_
+
+    shared_root_ids = [
+        r[0] for r in db.query(Share.mapped_root_id).filter(
+            Share.mapped_root_id.isnot(None),
+            or_(Share.granted_to == user_id, Share.is_public == True)
+        ).all()
+    ]
+    
+    # User can see files they own OR files in mapped roots shared with them
+    if shared_root_ids:
+        root_ids_str = ",".join(f"'{rid}'" for rid in shared_root_ids)
+        extra_where = [f"(f.owner_id = :user_id OR f.mapped_root_id IN ({root_ids_str}))"]
+    else:
+        extra_where = ["f.owner_id = :user_id"]
+
     params: dict = {
         "query": q,
         "user_id": user_id,
@@ -113,15 +129,20 @@ def search_files(
             q, e,
         )
 
-    # ── Step 2: LIKE filename fallback ────────────────────────────────────────
+    # ── Step 2: LIKE fallback ────────────────────────────────────────
     try:
-        q_obj = (
-            db.query(File)
-            .filter(
-                File.owner_id == user_id,
-                File.filename.ilike(f"%{q}%"),
+        from sqlalchemy import or_
+        q_obj = db.query(File).filter(File.filename.ilike(f"%{q}%"))
+        
+        if shared_root_ids:
+            q_obj = q_obj.filter(
+                or_(
+                    File.owner_id == user_id,
+                    File.mapped_root_id.in_(shared_root_ids),
+                )
             )
-        )
+        else:
+            q_obj = q_obj.filter(File.owner_id == user_id)
         if file_type:
             q_obj = q_obj.filter(File.file_type == file_type)
         if db_node_id:

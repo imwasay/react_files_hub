@@ -309,6 +309,10 @@ def sync_files(
                     index_status="pending",
                 )
                 db.add(f)
+                
+            db.flush() # ensure f.id is available
+            from agent.ingestion import index_file
+            index_file(db, f.id, "", f.filename, f.logical_path, f.mime_type)
 
             accepted.append(change.real_path)
         except Exception as e:

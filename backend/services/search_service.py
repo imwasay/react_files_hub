@@ -78,8 +78,11 @@ def search_files(
     else:
         extra_where = ["f.owner_id = :user_id"]
 
+    clean_q = q.replace('"', '').replace("'", "").strip()
+    fts_query = f'"{clean_q}"*' if clean_q else ""
+
     params: dict = {
-        "query": q,
+        "query": fts_query,
         "user_id": user_id,
         "limit": limit,
         "offset": offset,

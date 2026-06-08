@@ -6,14 +6,13 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # shared
-    node_mode: Literal["directory", "storage"]
     node_version: str = "1.0.0"
     log_level: str = "info"
     tls_cert_path: str = "/certs/fullchain.pem"
     tls_key_path: str = "/certs/privkey.pem"
     host_os: Literal["linux", "windows", "macos"] = "linux"
 
-    # directory mode
+    # directory mode (now active on all nodes)
     node_ip: Optional[str] = None
     self_node_id: Optional[str] = None        # identity for self-node bootstrap
     db_path: str = "/data/registry.db"
@@ -34,11 +33,10 @@ class Settings(BaseSettings):
     admin_email: Optional[EmailStr] = None
     admin_password: Optional[str] = None
 
-    # storage mode
+    # node settings
     node_id: Optional[str] = None
-    dir_node_ip: Optional[str] = None
-    dir_node_url: Optional[str] = None       # public URL of dir node e.g. https://file.kingservers.dns.army
-    mapped_roots: str = ""
+    storage_roots: str = ""
+    peer_nodes: str = ""
     replica_poll_base: int = 60
     replica_poll_jitter_max: int = 30
     watcher_debounce_ms: int = 2000
@@ -48,27 +46,47 @@ class Settings(BaseSettings):
     llm_host: Optional[str] = None
 
     @property
+    def peer_nodes_list(self) -> list[tuple[str, list[str]]]:
+        res = []
+        if not self.peer_nodes:
+            return res
+        for item in self.peer_nodes.split(";"):
+            if not item.strip():
+                continue
+            if "=" in item:
+                parts = item.split("=", 1)
+                if len(parts) == 2:
+                    nid, addrs = parts
+                    res.append((nid.strip(), [a.strip() for a in addrs.split(",") if a.strip()]))
+        return res
+
+    @property
+    def node_mode(self) -> str:
+        return "directory"
+
+    @property
     def is_directory(self) -> bool:
-        return self.node_mode == "directory"
+        return True
 
     @property
     def is_storage(self) -> bool:
-        return self.node_mode == "storage"
+        return True
 
     @property
     def llm_hosts_list(self) -> list[str]:
         return [h.strip() for h in self.llm_priority_hosts.split(",") if h.strip()]
 
     @property
-    def mapped_roots_list(self) -> list[str]:
-        return [r.strip() for r in self.mapped_roots.split(",") if r.strip()]
+    def storage_roots_list(self) -> list[str]:
+        return [r.strip() for r in self.storage_roots.split(",") if r.strip()]
 
     @property
-    def dir_node_contacts(self) -> list[str]:
-        """Priority-ordered contact addresses for the directory node."""
-        if not self.dir_node_ip:
-            return []
-        return [h.strip() for h in self.dir_node_ip.split(",") if h.strip()]
+    def mapped_roots(self) -> str:
+        return self.storage_roots
+
+    @property
+    def mapped_roots_list(self) -> list[str]:
+        return self.storage_roots_list
 
     class Config:
         env_file = ".env"

@@ -11,106 +11,44 @@ logger = logging.getLogger(__name__)
 
 FEDERATION_TOKEN = os.environ.get("FEDERATION_TOKEN", "")
 
-
-async def _get_dir_url() -> str:
-    for contact in settings.dir_node_contacts:
-        try:
-            async with httpx.AsyncClient(timeout=3) as client:
-                r = await client.get(f"http://{contact}:8000/api/v1/health")
-                if r.status_code == 200:
-                    return f"http://{contact}:8000"
-        except Exception:
-            continue
-    raise ConnectionError("Directory node unreachable on all contacts")
-
-
-async def _send_heartbeat():
+async def _announce_to_peer(peer_addr: str):
+    base_url = peer_addr
+    if not base_url.startswith("http://") and not base_url.startswith("https://"):
+        base_url = f"http://{base_url}"
+    url = f"{base_url.rstrip('/')}/api/v1/sync/announce"
+    
+    node_id = settings.node_id or settings.self_node_id or "unknown"
+    node_ip = settings.node_ip or ""
+    
     try:
-        url = await _get_dir_url()
-        cache_used = _get_cache_used_bytes()
-
-        roots_disk = []
-        for path in settings.mapped_roots_list:
-            if os.path.isdir(path):
-                try:
-                    stat = os.statvfs(path)
-                    roots_disk.append({
-                        "real_path": path,
-                        "total_bytes": stat.f_blocks * stat.f_frsize,
-                        "free_bytes": stat.f_bavail * stat.f_frsize,
-                        "used_bytes": (stat.f_blocks - stat.f_bfree) * stat.f_frsize,
-                    })
-                except Exception:
-                    pass
-
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
-                f"{url}/api/v1/nodes/heartbeat",
+                url,
                 json={
-                    "node_id": settings.node_id,
-                    "node_ip": settings.node_ip,
-                    "cache_used_bytes": cache_used,
-                    "status": "online",
-                    "roots_disk": roots_disk,
+                    "node_id": node_id,
+                    "addresses": node_ip,
+                    "host_os": settings.host_os
                 },
-                headers={"X-Federation-Token": FEDERATION_TOKEN},
+                headers={"X-Federation-Token": FEDERATION_TOKEN}
             )
             if r.status_code == 200:
-                data = r.json()
-                logger.debug("Heartbeat OK at %s", datetime.utcnow())
-                # ── User sync: upsert users from directory node ──
-                if "user_snapshot" in data:
-                    _sync_users(data["user_snapshot"])
+                logger.debug("Announced successfully to peer %s", peer_addr)
             else:
-                logger.warning("Heartbeat failed: %s", r.text)
+                logger.warning("Announcement to peer %s failed: %d", peer_addr, r.status_code)
     except Exception as e:
-        logger.warning("Heartbeat error: %s", e)
-
-
-def _sync_users(snapshot: list):
-    """Upsert users from directory node into local SQLite.
-    
-    This enables decentralized auth — the storage node can authenticate
-    users from its local DB even if the directory node goes offline.
-    """
-    from database import get_db
-    from models.user import User
-    try:
-        with get_db() as db:
-            for u in snapshot:
-                existing = db.query(User).filter(User.id == u["id"]).first()
-                if existing:
-                    existing.username = u["username"]
-                    existing.email = u["email"]
-                    existing.password_hash = u["password_hash"]
-                    existing.role = u["role"]
-                else:
-                    db.add(User(
-                        id=u["id"],
-                        username=u["username"],
-                        email=u["email"],
-                        password_hash=u["password_hash"],
-                        role=u["role"],
-                    ))
-            db.commit()
-        logger.debug("User sync: %d users upserted", len(snapshot))
-    except Exception as e:
-        logger.warning("User sync failed: %s", e)
-
-
-def _get_cache_used_bytes() -> int:
-    cache_path = "/data/cache"
-    total = 0
-    if os.path.isdir(cache_path):
-        for f in os.scandir(cache_path):
-            if f.is_file():
-                total += f.stat().st_size
-    return total
-
+        logger.warning("Announcement to peer %s failed with exception: %s", peer_addr, e)
 
 async def start_heartbeat():
     async def _loop():
+        # Delay startup slightly to let the server start
+        await asyncio.sleep(3)
         while True:
-            await _send_heartbeat()
+            peers = settings.peer_nodes_list
+            if not peers:
+                logger.debug("No peer nodes configured for heartbeats.")
+            else:
+                for peer_node_id, addresses in peers:
+                    for addr in addresses:
+                        asyncio.create_task(_announce_to_peer(addr))
             await asyncio.sleep(60)
     asyncio.create_task(_loop())

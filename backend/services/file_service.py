@@ -71,46 +71,63 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
     }
 
 
+import threading
+
+_in_flight = set()
+_in_flight_lock = threading.Lock()
+
 async def _bg_download_file(file_id, file_size_bytes, file_real_path, node_id, ips, cache_path, self_node_db_id):
     if not file_size_bytes or file_size_bytes > 10 * 1024 * 1024 * 1024:  # 10 GB
         return
+    
+    with _in_flight_lock:
+        if file_id in _in_flight:
+            return
+        _in_flight.add(file_id)
+
     import httpx, aiofiles, urllib.parse, os, uuid
     tmp_path = cache_path + ".tmp"
     if os.path.exists(tmp_path) or os.path.exists(cache_path):
+        with _in_flight_lock:
+            _in_flight.discard(file_id)
         return
     
     encoded_path = urllib.parse.quote(file_real_path)
     req_headers = {"X-Federation-Token": _make_internal_token(node_id)}
     
-    async with httpx.AsyncClient() as client:
-        for ip in ips:
-            base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
-            try:
-                async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=30.0) as r:
-                    if r.status_code != 200: continue
-                    async with aiofiles.open(tmp_path, "wb") as f:
-                        async for chunk in r.aiter_bytes(chunk_size=128 * 1024):
-                            await f.write(chunk)
-                os.rename(tmp_path, cache_path)
-                from database import SessionLocal
-                from models.file_cache import FileCache
-                db = SessionLocal()
+    try:
+        async with httpx.AsyncClient() as client:
+            for ip in ips:
+                base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
                 try:
-                    ce = db.query(FileCache).filter(FileCache.file_id == file_id, FileCache.cached_on_node_id == self_node_db_id).first()
-                    if not ce:
-                        ce = FileCache(id=str(uuid.uuid4()), file_id=file_id, cached_on_node_id=self_node_db_id, encrypted_path=cache_path, checksum="", size_bytes=file_size_bytes)
-                        db.add(ce)
-                    else:
-                        ce.size_bytes = file_size_bytes
-                    db.commit()
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).error("Failed to update cache DB: %s", e)
-                finally:
-                    db.close()
-                break
-            except Exception:
-                continue
+                    async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=30.0) as r:
+                        if r.status_code != 200: continue
+                        async with aiofiles.open(tmp_path, "wb") as f:
+                            async for chunk in r.aiter_bytes(chunk_size=128 * 1024):
+                                await f.write(chunk)
+                    os.replace(tmp_path, cache_path)
+                    from database import SessionLocal
+                    from models.file_cache import FileCache
+                    db = SessionLocal()
+                    try:
+                        ce = db.query(FileCache).filter(FileCache.file_id == file_id, FileCache.cached_on_node_id == self_node_db_id).first()
+                        if not ce:
+                            ce = FileCache(id=str(uuid.uuid4()), file_id=file_id, cached_on_node_id=self_node_db_id, encrypted_path=cache_path, checksum="", size_bytes=file_size_bytes)
+                            db.add(ce)
+                        else:
+                            ce.size_bytes = file_size_bytes
+                        db.commit()
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).error("Failed to update cache DB: %s", e)
+                    finally:
+                        db.close()
+                    break
+                except Exception:
+                    continue
+    finally:
+        with _in_flight_lock:
+            _in_flight.discard(file_id)
 
 
 async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> StreamingResponse:
@@ -238,9 +255,13 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
                     
                     async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=5.0) as r:
                         r.raise_for_status()
-                        async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
-                            yield chunk
-                            yielded_any = True
+                        try:
+                            async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
+                                yield chunk
+                                yielded_any = True
+                        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.HTTPError) as e:
+                            logger.error("Peer connection error mid-stream for file %s: %s", file.id, e)
+                            return
                 success = True
                 break  # Stream completed successfully
             except Exception as e:
@@ -266,10 +287,13 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
         if status_code == 206 and file.size_bytes:
             headers["Content-Range"] = f"bytes {start}-{end}/{file.size_bytes}"
 
+    import mimetypes
+    mime = file.mime_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+
     return StreamingResponse(
         _stream(),
         status_code=status_code,
-        media_type=file.mime_type or "application/octet-stream",
+        media_type=mime,
         headers=headers,
     )
 
@@ -277,3 +301,4 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
 def _make_internal_token(node_id: str) -> str:
     exp = datetime.utcnow() + timedelta(minutes=1)
     return jwt.encode({"node_id": node_id, "exp": exp}, settings.jwt_secret, algorithm="HS256")
+

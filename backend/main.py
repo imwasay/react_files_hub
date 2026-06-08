@@ -94,7 +94,7 @@ def bootstrap_self_node():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting files_hub node — mode: %s", settings.node_mode)
+    logger.info("Starting files_hub node")
     init_db()
     bootstrap_admin_user()
     bootstrap_self_node()
@@ -103,70 +103,46 @@ async def lifespan(app: FastAPI):
     for d in ("/data/thumbnails", "/data/subtitles"):
         os.makedirs(d, exist_ok=True)
 
-    if settings.is_storage:
-        # Prevent multiple workers from running tasks concurrently
-        try:
-            import fcntl
-            lock_file = open("/tmp/files_hub_storage_tasks.lock", "w")
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            app.state.storage_lock = lock_file
+    # Prevent multiple workers from running tasks concurrently
+    try:
+        import fcntl
+        lock_file = open("/tmp/files_hub_node_lock.lock", "w")
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        app.state.node_lock = lock_file
 
-            from agent.heartbeat import start_heartbeat
-            from agent.watcher import start_watcher
-            from agent.replica_sync import start_replica_sync
-            await start_heartbeat()
-            await start_watcher()
-            await start_replica_sync()
-            logger.info("Successfully started storage tasks on worker.")
-        except BlockingIOError:
-            logger.info("Another worker is running storage tasks. Skipping.")
-        except Exception as e:
-            logger.warning("Storage tasks lock failed, running anyway: %s", e)
-            from agent.heartbeat import start_heartbeat
-            from agent.watcher import start_watcher
-            from agent.replica_sync import start_replica_sync
-            await start_heartbeat()
-            await start_watcher()
-            await start_replica_sync()
-
-    if settings.is_directory:
-        # Prevent multiple workers from running tasks concurrently
-        try:
-            import fcntl
-            lock_file = open("/tmp/files_hub_dir_tasks.lock", "w")
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            app.state.dir_lock = lock_file
-
-            import asyncio
-            from agent.watcher import start_watcher_self_node
-            from agent.ingestion import process_queue
-            asyncio.create_task(start_watcher_self_node())
-            asyncio.create_task(process_queue())
-            logger.info("Successfully started directory tasks on worker.")
-        except BlockingIOError:
-            logger.info("Another worker is running directory tasks. Skipping.")
-        except Exception as e:
-            logger.warning("Directory tasks lock failed, running anyway: %s", e)
-            import asyncio
-            from agent.watcher import start_watcher_self_node
-            from agent.ingestion import process_queue
-            asyncio.create_task(start_watcher_self_node())
-            asyncio.create_task(process_queue())
+        import asyncio
+        from agent.heartbeat import start_heartbeat
+        from agent.watcher import start_watcher, start_watcher_self_node
+        from agent.replica_sync import start_replica_sync
+        from agent.ingestion import process_queue
+        await start_heartbeat()
+        await start_watcher()
+        await start_replica_sync()
+        asyncio.create_task(start_watcher_self_node())
+        asyncio.create_task(process_queue())
+        logger.info("Successfully started all background tasks on worker.")
+    except BlockingIOError:
+        logger.info("Another worker is running node tasks. Skipping.")
+    except Exception as e:
+        logger.warning("Node tasks lock failed, running anyway: %s", e)
+        import asyncio
+        from agent.heartbeat import start_heartbeat
+        from agent.watcher import start_watcher, start_watcher_self_node
+        from agent.replica_sync import start_replica_sync
+        from agent.ingestion import process_queue
+        await start_heartbeat()
+        await start_watcher()
+        await start_replica_sync()
+        asyncio.create_task(start_watcher_self_node())
+        asyncio.create_task(process_queue())
 
     yield
     # Release locks if held
-    if hasattr(app.state, "storage_lock"):
+    if hasattr(app.state, "node_lock"):
         try:
             import fcntl
-            fcntl.flock(app.state.storage_lock, fcntl.LOCK_UN)
-            app.state.storage_lock.close()
-        except Exception:
-            pass
-    if hasattr(app.state, "dir_lock"):
-        try:
-            import fcntl
-            fcntl.flock(app.state.dir_lock, fcntl.LOCK_UN)
-            app.state.dir_lock.close()
+            fcntl.flock(app.state.node_lock, fcntl.LOCK_UN)
+            app.state.node_lock.close()
         except Exception:
             pass
     logger.info("Shutting down files_hub node")
@@ -175,7 +151,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="files_hub",
     version=settings.node_version,
-    docs_url="/api/docs" if settings.is_directory else None,
+    docs_url="/api/docs",
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -192,7 +168,6 @@ app.add_middleware(
 @app.get("/api/v1/health")
 async def health():
     return {
-        "node_mode": settings.node_mode,
         "node_id": settings.node_id or settings.self_node_id,
         "version": settings.node_version,
         "status": "ok",
@@ -201,24 +176,12 @@ async def health():
 # ── mesh config — frontend reads this on startup ──────────────────────────────
 @app.get("/api/v1/config")
 async def get_config():
-    """Public endpoint. Frontend calls this on startup to learn the mesh topology.
-
-    When served from a storage node, returns dir_node_url so the frontend
-    can redirect all API calls to the actual directory node.
-    When served from the directory node, dir_node_url is absent (already there).
-    """
     config = {
-        "node_mode": settings.node_mode,
         "node_id": settings.node_id or settings.self_node_id,
         "node_ip": settings.node_ip,
         "version": settings.node_version,
     }
 
-    # Storage nodes tell the frontend where the real directory node is
-    if settings.is_storage and settings.dir_node_url:
-        config["dir_node_url"] = settings.dir_node_url.rstrip("/")
-
-    # Include all online storage nodes from local DB (works for both Directory and Storage nodes)
     try:
         from database import get_db
         from models.node import Node
@@ -238,30 +201,34 @@ from routers import auth
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
 # ── directory and storage fallback routers ────────────────────────────────────────────────────
-if settings.is_directory or settings.is_storage:
-    from routers import nodes, roots, files, shares, search, cache, ingest, replica, admin
-    from routers import browse as browse_router, thumbnails, media, internal
-    app.include_router(nodes.router,        prefix="/api/v1/nodes",    tags=["nodes"])
-    app.include_router(roots.router,        prefix="/api/v1/roots",    tags=["roots"])
-    app.include_router(files.router,        prefix="/api/v1/files",    tags=["files"])
-    app.include_router(shares.router,       prefix="/api/v1/shares",   tags=["shares"])
-    app.include_router(search.router,       prefix="/api/v1/search",   tags=["search"])
-    app.include_router(cache.router,        prefix="/api/v1/cache",    tags=["cache"])
-    app.include_router(ingest.router,       prefix="/api/v1/ingest",   tags=["ingest"])
-    app.include_router(replica.router,      prefix="/api/v1/replica",  tags=["replica"])
-    app.include_router(admin.router,        prefix="/api/v1/admin",    tags=["admin"])
-    app.include_router(browse_router.router, prefix="/api/v1/browse",  tags=["browse"])
-    app.include_router(thumbnails.router,   prefix="/api/v1/files",    tags=["thumbnails"])
-    app.include_router(media.router,        prefix="/api/v1/files",    tags=["media"])
-    app.include_router(internal.router,     prefix="/internal",        tags=["internal"])
+from routers import nodes, roots, files, shares, search, cache, ingest, replica, admin, sync
+from routers import browse as browse_router, thumbnails, media, internal
+app.include_router(nodes.router,        prefix="/api/v1/nodes",    tags=["nodes"])
+app.include_router(roots.router,        prefix="/api/v1/roots",    tags=["roots"])
+app.include_router(files.router,        prefix="/api/v1/files",    tags=["files"])
+app.include_router(shares.router,       prefix="/api/v1/shares",   tags=["shares"])
+app.include_router(search.router,       prefix="/api/v1/search",   tags=["search"])
+app.include_router(cache.router,        prefix="/api/v1/cache",    tags=["cache"])
+app.include_router(ingest.router,       prefix="/api/v1/ingest",   tags=["ingest"])
+app.include_router(replica.router,      prefix="/api/v1/replica",  tags=["replica"])
+app.include_router(admin.router,        prefix="/api/v1/admin",    tags=["admin"])
+app.include_router(sync.router,         prefix="/api/v1/sync",     tags=["sync"])
+app.include_router(browse_router.router, prefix="/api/v1/browse",  tags=["browse"])
+app.include_router(thumbnails.router,   prefix="/api/v1/files",    tags=["thumbnails"])
+app.include_router(media.router,        prefix="/api/v1/files",    tags=["media"])
+app.include_router(internal.router,     prefix="/internal",        tags=["internal"])
 
 # ── static files LAST — catches everything not matched above ──────────────────
-if (settings.is_directory or settings.is_storage) and settings.serve_react and os.path.isdir(settings.react_static_path):
+if settings.serve_react and os.path.isdir(settings.react_static_path):
     from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
 
-    app.mount("/assets", StaticFiles(directory=os.path.join(settings.react_static_path, "assets")), name="assets")
+    app.mount(
+        "/",
+        StaticFiles(directory=settings.react_static_path, html=True),
+        name="react",
+    )
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str = ""):
-        index_path = os.path.join(settings.react_static_path, "index.html")
-        return FileResponse(index_path)
+    @app.exception_handler(404)
+    async def custom_404_handler(request, __):
+        return FileResponse(os.path.join(settings.react_static_path, "index.html"))

@@ -39,6 +39,7 @@ interface FileCardProps {
   modifiedAt?: string | null
   hasThumbnail?: boolean
   nodeStatus?: string
+  nodeReachable?: boolean
   isCached?: boolean
   indexStatus?: string
   onClick: () => void
@@ -47,11 +48,11 @@ interface FileCardProps {
 
 export default function FileCard({
   fileId, filename, fileType, mimeType, sizeBytes, modifiedAt,
-  hasThumbnail, nodeStatus, isCached, indexStatus, onClick, style,
+  hasThumbnail, nodeStatus, nodeReachable, isCached, indexStatus, onClick, style,
 }: FileCardProps) {
   const [thumbErr, setThumbErr] = useState(false)
   const typeInfo = TYPE_ICONS[fileType] || TYPE_ICONS.other
-  const isOffline = nodeStatus === 'offline' && !isCached
+  const isOffline = nodeReachable === false && !isCached
 
   return (
     <div
@@ -59,11 +60,12 @@ export default function FileCard({
       className="glass-card"
       style={{
         cursor: isOffline ? 'not-allowed' : 'pointer',
-        opacity: isOffline ? 0.5 : 1,
+        opacity: isOffline ? 0.4 : 1,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         position: 'relative',
+        filter: isOffline ? 'grayscale(100%)' : 'none',
         ...style,
       }}
     >
@@ -117,6 +119,30 @@ export default function FileCard({
         }}>
           {(mimeType?.split('/')[1] || fileType || '').slice(0, 6)}
         </span>
+        
+        {/* Offline Badge Overlay */}
+        {isOffline && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10,
+          }}>
+            <span style={{
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '0.25rem 0.75rem',
+              borderRadius: 'var(--radius-full)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
+            }}>
+              Node Offline
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Info */}

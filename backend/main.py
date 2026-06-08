@@ -216,19 +216,18 @@ async def get_config():
     if settings.is_storage and settings.dir_node_url:
         config["dir_node_url"] = settings.dir_node_url.rstrip("/")
 
-    # Directory node: include all online storage nodes
-    if settings.is_directory:
-        try:
-            from database import get_db
-            from models.node import Node
-            with get_db() as db:
-                nodes = db.query(Node).filter(Node.status != "offline").all()
-                config["storage_nodes"] = [
-                    {"node_id": n.node_id, "node_ip": n.node_ip, "status": n.status}
-                    for n in nodes
-                ]
-        except Exception:
-            config["storage_nodes"] = []
+    # Include all online storage nodes from local DB (works for both Directory and Storage nodes)
+    try:
+        from database import get_db
+        from models.node import Node
+        with get_db() as db:
+            nodes = db.query(Node).filter(Node.status != "offline").all()
+            config["storage_nodes"] = [
+                {"node_id": n.node_id, "node_ip": n.node_ip, "status": n.status}
+                for n in nodes
+            ]
+    except Exception:
+        config["storage_nodes"] = []
 
     return config
 

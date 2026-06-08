@@ -107,6 +107,7 @@ def browse(
                 "item_count": file_count,
                 "node_id": r.node.node_id if r.node else None,
                 "node_status": r.node.status if r.node else None,
+                "node_reachable": (r.node.status == "online") if r.node else False,
                 "root_id": r.id,
             })
         # Sort roots alphabetically
@@ -209,6 +210,7 @@ def browse(
             "modified_at": f.modified_at.isoformat() if f.modified_at else None,
             "index_status": f.index_status,
             "node_status": f.node.status if f.node else None,
+            "node_reachable": (f.node.status == "online") if f.node else False,
             "is_cached": len(f.cache_entries) > 0,
             "has_thumbnail": has_thumb,
         })

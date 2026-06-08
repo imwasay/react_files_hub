@@ -9,6 +9,7 @@ export interface BrowseItem {
   total_size?: number
   node_id?: string
   node_status?: string
+  node_reachable?: boolean
   root_id?: string
   // file fields
   file_id?: string

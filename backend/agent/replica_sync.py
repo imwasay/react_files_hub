@@ -31,7 +31,7 @@ async def _fetch_diff(since: float) -> dict:
         return r.json()
 
 
-def _apply_diff(diff: dict):
+def _apply_diff(diff: dict) -> int:
     from models.node import Node
     from datetime import datetime
     with get_db() as db:
@@ -69,7 +69,9 @@ def _apply_diff(diff: dict):
                     is_media_library=r_data["is_media_library"],
                 ))
 
+        file_count = 0
         for f_data in diff.get("files", []):
+            file_count += 1
             existing = db.query(File).filter(File.id == f_data["id"]).first()
             if existing:
                 existing.logical_path = f_data["logical_path"]
@@ -108,14 +110,17 @@ def _apply_diff(diff: dict):
                 )
                 db.add(share)
 
+        return file_count
+
 
 async def _sync_once():
     global _last_sync
     try:
         diff = await _fetch_diff(_last_sync)
-        _apply_diff(diff)
+        count = _apply_diff(diff)
         _last_sync = diff.get("server_time", time.time())
         logger.debug("Replica sync complete, server_time=%s", _last_sync)
+        logger.info("Replica sync: wrote %d file records to local DB", count)
         import routers.replica
         routers.replica.last_sync_error = None
     except Exception as e:

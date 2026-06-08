@@ -28,6 +28,7 @@ interface Props {
   modifiedAt?: string | null
   hasThumbnail?: boolean
   nodeStatus?: string
+  nodeReachable?: boolean
   isCached?: boolean
   indexStatus?: string
   onClick: () => void
@@ -35,10 +36,10 @@ interface Props {
 
 export default function FileRow({
   fileId, filename, fileType, mimeType, sizeBytes, modifiedAt,
-  hasThumbnail, nodeStatus, isCached, indexStatus, onClick,
+  hasThumbnail, nodeStatus, nodeReachable, isCached, indexStatus, onClick,
 }: Props) {
   const [thumbErr, setThumbErr] = useState(false)
-  const isOffline = nodeStatus === 'offline' && !isCached
+  const isOffline = nodeReachable === false && !isCached
 
   return (
     <div
@@ -51,8 +52,10 @@ export default function FileRow({
         borderRadius: 'var(--radius-sm)',
         transition: 'background 0.15s',
         cursor: isOffline ? 'not-allowed' : 'pointer',
-        opacity: isOffline ? 0.5 : 1,
+        opacity: isOffline ? 0.4 : 1,
+        filter: isOffline ? 'grayscale(100%)' : 'none',
         borderBottom: '1px solid var(--border-subtle)',
+        position: 'relative',
       }}
       onMouseOver={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
       onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
@@ -114,8 +117,20 @@ export default function FileRow({
       </div>
 
       {/* Status badges */}
-      <div style={{ width: 50, display: 'flex', gap: '0.25rem', justifyContent: 'flex-end', flexShrink: 0 }}>
-        {nodeStatus && (
+      <div style={{ width: 80, display: 'flex', gap: '0.25rem', justifyContent: 'flex-end', flexShrink: 0 }}>
+        {isOffline ? (
+          <span style={{
+            background: '#ef4444',
+            color: 'white',
+            fontSize: '0.625rem',
+            fontWeight: 700,
+            padding: '0.125rem 0.375rem',
+            borderRadius: 'var(--radius-sm)',
+            textTransform: 'uppercase',
+          }}>
+            Offline
+          </span>
+        ) : nodeStatus && (
           <span className={`badge badge-${nodeStatus === 'online' ? 'online' : isCached ? 'cached' : 'offline'}`}
             style={{ fontSize: '0.5625rem' }}>
             {isCached ? '⚡' : nodeStatus === 'online' ? '●' : '○'}

@@ -19,7 +19,7 @@ WORKDIR /frontend
 
 # Cache dependencies first
 COPY frontend/package*.json ./
-RUN npm ci --silent
+RUN npm install
 
 # Copy source and build
 COPY frontend/ .
@@ -44,11 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY backend/requirements.txt .
 
-# Install PyTorch CPU wheels first (large, benefits from layer caching)
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
-
-# Install remaining dependencies
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+# Install backend dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source
 COPY backend/ .

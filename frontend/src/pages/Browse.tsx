@@ -170,6 +170,7 @@ export default function Browse() {
                       modifiedAt={f.modified_at}
                       hasThumbnail={f.has_thumbnail}
                       nodeStatus={f.node_status}
+                      nodeReachable={f.node_reachable}
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}
@@ -196,6 +197,7 @@ export default function Browse() {
                       modifiedAt={f.modified_at}
                       hasThumbnail={f.has_thumbnail}
                       nodeStatus={f.node_status}
+                      nodeReachable={f.node_reachable}
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}

@@ -10,6 +10,29 @@ from models.node import Node
 logger = logging.getLogger(__name__)
 
 
+def _file_to_dict(f: File) -> dict:
+    """
+    Serialize a File ORM object to the same shape that browse.py returns
+    for file items, so the frontend can render search results identically.
+    """
+    has_thumb = f.file_type in ("image", "video")
+    return {
+        "name": f.filename,
+        "type": "file",
+        "path": f.logical_path,
+        "file_id": f.id,
+        "file_type": f.file_type,
+        "mime_type": f.mime_type,
+        "size_bytes": f.size_bytes or 0,
+        "modified_at": f.modified_at.isoformat() if f.modified_at else None,
+        "index_status": f.index_status,
+        "node_status": f.node.status if f.node else None,
+        "node_reachable": (f.node.status == "online") if f.node else False,
+        "is_cached": len(f.cache_entries) > 0,
+        "has_thumbnail": has_thumb,
+    }
+
+
 def search_files(
     db: Session,
     user_id: str,
@@ -21,87 +44,92 @@ def search_files(
 ) -> Tuple[list, bool]:
     """
     Search files using SQLite FTS5 with BM25 ranking.
-    Falls back to simple ILIKE filename search if FTS5 syntax fails.
+
+    1. Tries FTS5 MATCH with bm25() ordering.
+    2. On any exception (malformed query, table missing, etc.) falls back
+       to a simple LIKE filename search.
+    3. Returns a list of full file objects — same shape as browse returns —
+       so the frontend can render search results without a separate adapter.
     """
     offset = (page - 1) * limit
-    
-    # Base params for the query
-    params = {
+
+    # ── Build optional filter clauses ─────────────────────────────────────────
+    extra_where = ["f.owner_id = :user_id"]
+    params: dict = {
         "query": q,
         "user_id": user_id,
         "limit": limit,
-        "offset": offset
+        "offset": offset,
     }
 
-    # Build WHERE clause for normal file filters
-    where_clauses = ["f.owner_id = :user_id"]
     if file_type:
-        where_clauses.append("f.file_type = :file_type")
+        extra_where.append("f.file_type = :file_type")
         params["file_type"] = file_type
-    
+
+    db_node_id = None
     if node_id:
         node = db.query(Node).filter(Node.node_id == node_id).first()
         if node:
-            where_clauses.append("f.node_id = :db_node_id")
+            extra_where.append("f.node_id = :db_node_id")
             params["db_node_id"] = node.id
         else:
-            return [], False # Node not found, return empty
+            return [], False   # unknown node — return empty
 
-    where_sql = " AND ".join(where_clauses)
+    where_sql = " AND ".join(extra_where)
 
+    # ── Step 1: FTS5 MATCH ────────────────────────────────────────────────────
     try:
-        # Attempt FTS5 query
-        fts_query = f"""
-            SELECT f.id, f.filename, f.logical_path, f.file_type, n.status as node_status, bm25(file_fts) as rank
+        fts_sql = f"""
+            SELECT f.id
             FROM file_fts
             JOIN files f ON file_fts.file_id = f.id
-            JOIN nodes n ON f.node_id = n.id
-            WHERE file_fts MATCH :query AND {where_sql}
-            ORDER BY rank
+            WHERE file_fts MATCH :query
+              AND {where_sql}
+            ORDER BY bm25(file_fts)   -- bm25() returns negatives; lower = better match
             LIMIT :limit OFFSET :offset
         """
-        rows = db.execute(text(fts_query), params).fetchall()
-        
-        results = [
-            {
-                "file_id": row.id,
-                "filename": row.filename,
-                "logical_path": row.logical_path,
-                "snippet": None,
-                "score": 1.0 / (row.rank + 1.0) if row.rank else 1.0,  # rough normalization
-                "node_status": row.node_status,
-                "file_type": row.file_type,
+        rows = db.execute(text(fts_sql), params).fetchall()
+        file_ids = [row.id for row in rows]
+
+        if file_ids:
+            # Preserve BM25 ordering by loading ORM objects in the same order
+            id_to_file = {
+                f.id: f
+                for f in db.query(File).filter(File.id.in_(file_ids)).all()
             }
-            for row in rows
-        ]
-        return results, False  # False = llm_available flag is false
+            results = [
+                _file_to_dict(id_to_file[fid])
+                for fid in file_ids
+                if fid in id_to_file
+            ]
+            return results, False
+
+        # FTS5 returned zero rows — fall through to LIKE fallback
+        raise ValueError("FTS5 returned no rows; trying LIKE fallback")
 
     except Exception as e:
-        logger.warning("FTS5 search failed (possibly invalid syntax), falling back to filename search: %s", e)
-        
-        # Fallback to simple filename search
-        query = db.query(File).filter(
-            File.owner_id == user_id,
-            File.filename.ilike(f"%{q}%"),
+        logger.warning(
+            "FTS5 search failed or empty (query=%r), falling back to filename LIKE: %s",
+            q, e,
+        )
+
+    # ── Step 2: LIKE filename fallback ────────────────────────────────────────
+    try:
+        q_obj = (
+            db.query(File)
+            .filter(
+                File.owner_id == user_id,
+                File.filename.ilike(f"%{q}%"),
+            )
         )
         if file_type:
-            query = query.filter(File.file_type == file_type)
-        if node_id:
-            node = db.query(Node).filter(Node.node_id == node_id).first()
-            if node:
-                query = query.filter(File.node_id == node.id)
-                
-        files = query.offset(offset).limit(limit).all()
-        results = [
-            {
-                "file_id": f.id,
-                "filename": f.filename,
-                "logical_path": f.logical_path,
-                "snippet": None,
-                "score": 1.0,
-                "node_status": f.node.status,
-                "file_type": f.file_type,
-            }
-            for f in files
-        ]
-        return results, False
+            q_obj = q_obj.filter(File.file_type == file_type)
+        if db_node_id:
+            q_obj = q_obj.filter(File.node_id == db_node_id)
+
+        files = q_obj.order_by(File.filename).offset(offset).limit(limit).all()
+        return [_file_to_dict(f) for f in files], False
+
+    except Exception as e:
+        logger.error("LIKE fallback also failed for query=%r: %s", q, e)
+        return [], False

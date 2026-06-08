@@ -63,7 +63,21 @@ def init_db():
     from sqlalchemy import text
     try:
         with get_db() as db:
-            # Create FTS5 virtual table for full-text search
+            # ── Migration: drop old broken external-content FTS5 table ────────
+            # The old schema used `content=files` which is an external-content
+            # table. The `files` table lacks file_id/relative_path/extracted_text
+            # columns, so content reads were silently broken. We detect the old
+            # schema and drop+recreate so existing deployments auto-migrate.
+            old_schema = db.execute(text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name='file_fts'"
+            )).scalar()
+            if old_schema and "content=" in old_schema:
+                logger.info("Migrating file_fts: dropping old external-content table")
+                db.execute(text("DROP TABLE IF EXISTS file_fts"))
+                db.commit()
+
+            # Create self-contained FTS5 virtual table
             db.execute(text("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
                     file_id UNINDEXED,
@@ -71,12 +85,11 @@ def init_db():
                     relative_path,
                     mime_type,
                     extracted_text,
-                    content=files,
                     tokenize='porter unicode61'
                 );
             """))
             db.commit()
-        logger.info("FTS5 table verified.")
+        logger.info("FTS5 table verified (self-contained, no content= link).")
     except Exception as e:
         logger.warning("FTS5 table creation failed: %s", e)
 

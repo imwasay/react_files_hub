@@ -161,6 +161,10 @@ def _sync_changes_to_db(node_id_str: str, changes: list):
     from models.file import File
     from models.mapped_root import MappedRoot
 
+    # Collect (file_id, real_path, filename, logical_path, mime_type) for
+    # every add/modify so we can FTS-index them after the DB session closes.
+    fts_queue: list[dict] = []
+
     with get_db() as db:
         node = db.query(Node).filter(Node.node_id == node_id_str).first()
         if not node:
@@ -231,11 +235,39 @@ def _sync_changes_to_db(node_id_str: str, changes: list):
                     )
                     db.add(f)
 
+                # Queue for FTS indexing — f.id is set (uuid assigned above if new)
+                fts_queue.append({
+                    "file_id": f.id,
+                    "real_path": change["real_path"],
+                    "filename": change["filename"],
+                    "logical_path": change.get("logical_path", ""),
+                    "mime_type": change.get("mime_type", "") or "",
+                })
                 accepted += 1
             except Exception as e:
                 logger.warning("DB sync failed for %s: %s", change.get("real_path"), e)
 
         logger.info("Self-node DB sync: %d files processed.", accepted)
+    # ── DB session committed and closed here ─────────────────────────────────
+
+    # ── FTS5 indexing — runs after commit so file rows are visible ────────────
+    if fts_queue:
+        from agent.ingestion import index_file
+        indexed = 0
+        for item in fts_queue:
+            try:
+                index_file(
+                    db_session=None,
+                    file_id=item["file_id"],
+                    real_path=item["real_path"],
+                    filename=item["filename"],
+                    relative_path=item["logical_path"],
+                    mime_type=item["mime_type"],
+                )
+                indexed += 1
+            except Exception as e:
+                logger.debug("FTS index skipped for %s: %s", item.get("filename"), e)
+        logger.info("FTS5 indexed %d/%d files from watcher sync.", indexed, len(fts_queue))
 
 
 async def _initial_scan_self_node(node_id_str: str, root_path: Optional[str] = None):

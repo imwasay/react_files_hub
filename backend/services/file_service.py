@@ -62,10 +62,10 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
             direct_url = f"http://{best_ip}:8000/internal/serve?token={token}"
 
     return {
-        "strategy": "direct" if direct_url else "proxy",
+        "strategy": "proxy",  # Forced to proxy for caching
         "source": "origin",
         "direct": {"url": direct_url, "expires_in": 600} if direct_url else None,
-        # Proxy fallback: directory node streams it server-side
+        # Proxy: directory node streams it server-side
         "proxy": {"stream_url": f"/api/v1/files/{file.id}/stream"},
         "proxy_fallback": True,
     }

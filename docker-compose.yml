@@ -16,7 +16,7 @@ services:
       # Pass NODE_MODE explicitly if you want to override the .env file
       - NODE_MODE=${NODE_MODE:-directory}
     volumes:
-      - ./data:/app/data
+      - ./data:/data
       - /etc/letsencrypt:/certs:ro
       # ── Drive mounts ────────────────────────────────────────────────────
       # Add your actual paths here. Examples:
@@ -24,9 +24,7 @@ services:
       - /mnt/WD2T/Movies:/mnt/WD2T/Movies:ro
       #   - /home/user/shared:/mnt/shared:ro
       #   - C:/Users/friend/Files:/mnt/share1:ro   # Windows
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
-      - "${INTERNAL_PORT:-8001}:8001"
+    network_mode: "host"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]

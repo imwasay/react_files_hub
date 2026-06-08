@@ -25,11 +25,10 @@ echo -e "${YELLOW}Suggestion for secrets: run 'openssl rand -hex 32' in another 
 read -p "Enter JWT_SECRET: " JWT_SECRET
 read -p "Enter NODE_FEDERATION_SECRET: " NODE_FEDERATION_SECRET
 read -p "Enter ADMIN_USERNAME: " ADMIN_USERNAME
+read -p "Enter ADMIN_EMAIL: " ADMIN_EMAIL
 read -p "Enter ADMIN_PASSWORD: " ADMIN_PASSWORD
 read -p "Enter DB_PATH (default: ./data/registry.db): " DB_PATH
-DB_PATH=${DB_PATH:-./data/registry.db}
-read -p "Enter CHROMA_PATH (default: ./data/chroma): " CHROMA_PATH
-CHROMA_PATH=${CHROMA_PATH:-./data/chroma}
+DB_PATH=${DB_PATH:-/data/registry.db}
 read -p "Enter HOST_PORT (default: 8000): " HOST_PORT
 HOST_PORT=${HOST_PORT:-8000}
 
@@ -52,9 +51,9 @@ SELF_ADDRESSES=${SELF_ADDRESSES}
 JWT_SECRET=${JWT_SECRET}
 NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
 ADMIN_USERNAME=${ADMIN_USERNAME}
+ADMIN_EMAIL=${ADMIN_EMAIL}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 DB_PATH=${DB_PATH}
-CHROMA_PATH=${CHROMA_PATH}
 PEER_NODES=${PEER_NODES}
 EOF
 
@@ -64,9 +63,9 @@ services:
     image: wasayabdul51/react-files-hub:latest
     env_file: .env
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     ports:
-      - "${HOST_PORT}:8000"
+      - "127.0.0.1:${HOST_PORT}:8000"
     restart: unless-stopped
 EOF
 

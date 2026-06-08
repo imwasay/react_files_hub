@@ -38,7 +38,7 @@ NODE_FEDERATION_SECRET=${NODE_FEDERATION_SECRET}
 DIRECTORY_NODE_ADDRESSES=${DIRECTORY_NODE_ADDRESSES}
 EOF
 
-VOLUMES_YAML="      - ./data:/app/data"
+VOLUMES_YAML="      - ./data:/data"
 IFS=',' read -ra DIRS <<< "$WATCH_DIRS"
 for dir in "${DIRS[@]}"; do
     VOLUMES_YAML+=$'\n'"      - ${dir}:${dir}:ro"

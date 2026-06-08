@@ -94,6 +94,11 @@ def refresh(body: dict, db: Session = Depends(get_db_dep)):
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 
+@router.get("/debug")
+def debug_users(db: Session = Depends(get_db_dep)):
+    users = db.query(User).all()
+    return [{"email": u.email, "username": u.username} for u in users]
+
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return {

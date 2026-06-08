@@ -31,3 +31,9 @@ else
     echo -e "${RED}Push failed.${NC}"
     exit 1
 fi
+
+echo -e "${YELLOW}Restarting local containers to pick up the new image...${NC}"
+docker compose pull
+docker compose down
+docker compose up -d
+echo -e "${GREEN}Containers restarted successfully.${NC}"

@@ -136,7 +136,7 @@ api.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    if (err.response?.status === 401 && !original._retryAuth && !refreshing) {
+    if (err.response?.status === 401 && !original._retryAuth && !refreshing && !original.url?.includes("/auth/login")) {
       original._retryAuth = true
       refreshing = true
       try {

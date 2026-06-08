@@ -60,6 +60,15 @@ def _build_change(op: str, real_path: str, root_path: str, logical_name: str) ->
     }
 
 
+def _is_subpath(child: str, parent: str) -> bool:
+    """Safely check if a path is a child of another path across OSes."""
+    c_path = os.path.normcase(os.path.abspath(child))
+    p_path = os.path.normcase(os.path.abspath(parent))
+    if not p_path.endswith(os.sep):
+        p_path += os.sep
+    return c_path.startswith(p_path) or c_path == p_path.rstrip(os.sep)
+
+
 # ── storage node path — pushes via HTTP ──────────────────────────────────────
 
 async def _push_changes(changes: list):
@@ -118,7 +127,7 @@ async def start_watcher():
         async for batch in awatch(*paths, debounce=debounce):
             changes = []
             for change_type, path in batch:
-                root_path = next((r for r in paths if path.startswith(r)), paths[0])
+                root_path = next((r for r in paths if _is_subpath(path, r)), paths[0])
                 logical_name = root_path  # use full path; dir node rewrites using its registered logical_name
                 try:
                     if change_type == Change.deleted:
@@ -180,7 +189,7 @@ def _sync_changes_to_db(node_id_str: str, changes: list):
                 root = None
                 best_len = -1
                 for r in db.query(MappedRoot).filter(MappedRoot.node_id == node.id).all():
-                    if change["real_path"].startswith(r.real_path) and len(r.real_path) > best_len:
+                    if _is_subpath(change["real_path"], r.real_path) and len(r.real_path) > best_len:
                         root = r
                         best_len = len(r.real_path)
 
@@ -322,7 +331,7 @@ async def start_watcher_self_node():
         async for batch in awatch(*paths, debounce=debounce):
             changes = []
             for change_type, path in batch:
-                root_path = next((r for r in paths if path.startswith(r)), paths[0])
+                root_path = next((r for r in paths if _is_subpath(path, r)), paths[0])
                 logical_name = root_map.get(root_path, Path(root_path).name)
                 try:
                     if change_type == Change.deleted:

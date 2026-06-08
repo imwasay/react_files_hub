@@ -122,7 +122,8 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
                 continue
         
         # If we exit the loop, all IPs failed
-        raise HTTPException(status_code=502, detail="Failed to reach storage node on any configured IP")
+        logger.error("Failed to reach storage node %s on any configured IP", serve_node.node_id)
+        raise RuntimeError("Failed to reach storage node on any configured IP")
 
     status_code = 206 if range_header else 200
     return StreamingResponse(

@@ -163,6 +163,11 @@ def _apply_peer_diff(files_data: list, users_data: list) -> tuple[int, list]:
                     created_at=created_dt,
                     modified_at=modified_dt
                 ))
+            
+            # Index into FTS5 for search (even without text content, filename is indexed)
+            from agent.ingestion import index_file
+            index_file(db, f_data["id"], "", f_data["filename"], f_data["logical_path"], f_data["mime_type"])
+            
             applied += 1
             
             # Queue for pre-caching

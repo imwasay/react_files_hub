@@ -26,14 +26,17 @@ _MEDIA_EXTS = {
 }
 
 
-def _extract_text(real_path: str, mime_type: str) -> str:
+def _extract_text(real_path: str, mime_type: str, filename: str) -> str:
     """
     Extract up to ~500 words from a file for FTS5 indexing.
     Returns "" on any failure or for binary/media types.
     Never raises.
     """
-    ext = os.path.splitext(real_path)[1].lower()
+    ext = os.path.splitext(filename)[1].lower()
     mime = (mime_type or "").lower()
+
+    if not real_path or not os.path.exists(real_path):
+        return ""
 
     try:
         # ── PDF ──────────────────────────────────────────────────────────────
@@ -75,6 +78,43 @@ def _extract_text(real_path: str, mime_type: str) -> str:
             except Exception as e:
                 logger.debug("docx extraction failed for %s: %s", real_path, e)
                 return ""
+        
+        # ── PowerPoint (.pptx) ────────────────────────────────────────────────
+        if ext == ".pptx" or "presentationml.presentation" in mime:
+            try:
+                from pptx import Presentation
+                prs = Presentation(real_path)
+                words = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text"):
+                            words.extend(shape.text.split())
+                    if len(words) >= 500:
+                        break
+                return " ".join(words[:500])
+            except Exception as e:
+                logger.debug("pptx extraction failed for %s: %s", real_path, e)
+                return ""
+                
+        # ── Excel (.xlsx) ────────────────────────────────────────────────────
+        if ext == ".xlsx" or "spreadsheetml.sheet" in mime:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(real_path, data_only=True, read_only=True)
+                words = []
+                for sheet in wb.worksheets:
+                    for row in sheet.iter_rows(values_only=True):
+                        for cell in row:
+                            if cell is not None:
+                                words.extend(str(cell).split())
+                        if len(words) >= 500:
+                            break
+                    if len(words) >= 500:
+                        break
+                return " ".join(words[:500])
+            except Exception as e:
+                logger.debug("xlsx extraction failed for %s: %s", real_path, e)
+                return ""
 
         # ── Plain text files ──────────────────────────────────────────────────
         if ext in _PLAIN_TEXT_EXTS or mime.startswith("text/"):
@@ -115,7 +155,7 @@ def index_file(
     Accepts an existing db_session (SQLAlchemy Session) or None.
     When None, opens its own session via SessionLocal.
     """
-    extracted_text = _extract_text(real_path, mime_type)
+    extracted_text = _extract_text(real_path, mime_type, filename)
 
     sql = text("""
         INSERT OR REPLACE INTO file_fts

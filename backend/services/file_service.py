@@ -108,6 +108,7 @@ async def _bg_download_file(file_id, file_size_bytes, file_real_path, node_id, i
                     os.replace(tmp_path, cache_path)
                     from database import SessionLocal
                     from models.file_cache import FileCache
+                    from models.file import File
                     db = SessionLocal()
                     try:
                         ce = db.query(FileCache).filter(FileCache.file_id == file_id, FileCache.cached_on_node_id == self_node_db_id).first()
@@ -117,6 +118,13 @@ async def _bg_download_file(file_id, file_size_bytes, file_real_path, node_id, i
                         else:
                             ce.size_bytes = file_size_bytes
                         db.commit()
+                        
+                        # Re-index the file for semantic search now that we have local bytes!
+                        from agent.ingestion import index_file
+                        f_record = db.query(File).filter(File.id == file_id).first()
+                        if f_record:
+                            index_file(db, file_id, cache_path, f_record.filename, f_record.logical_path, f_record.mime_type)
+                            
                     except Exception as e:
                         import logging
                         logging.getLogger(__name__).error("Failed to update cache DB: %s", e)

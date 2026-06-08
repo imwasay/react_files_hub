@@ -45,8 +45,8 @@ export default function Search() {
   const handleResultClick = (r: any) => {
     if (r.file_type === 'video' || r.file_type === 'audio') {
       navigate(`/play/${r.file_id}`)
-    } else if (r.logical_path) {
-      const parts = r.logical_path.split('/')
+    } else if (r.path) {
+      const parts = r.path.split('/')
       parts.pop()
       navigate(`/browse/${parts.join('/')}`)
     }
@@ -163,10 +163,10 @@ export default function Search() {
               fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-heading)',
               marginBottom: '0.125rem',
             }}>
-              {r.filename}
+              {r.name}
             </div>
             <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              {r.logical_path}
+              {r.path}
             </div>
             {r.snippet && (
               <div style={{

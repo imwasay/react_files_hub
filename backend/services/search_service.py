@@ -6,6 +6,7 @@ import logging
 
 from models.file import File
 from models.node import Node
+from models.mapped_root import MappedRoot
 
 logger = logging.getLogger(__name__)
 

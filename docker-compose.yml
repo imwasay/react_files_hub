@@ -6,12 +6,14 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
+      args:
+        # Bake Hassan's URL into the frontend so fresh sessions can find the fallback
+        VITE_FALLBACK_NODE_URLS: "https://alphaservers.dns.army"
     env_file: .env
     volumes:
       - ./data:/data
-      - ./frontend/dist:/app/frontend/dist:ro
       - /etc/letsencrypt:/certs:ro
       # ── Drive mounts ────────────────────────────────────────────────────
       # Add your actual paths here. Examples:

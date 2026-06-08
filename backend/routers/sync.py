@@ -107,3 +107,26 @@ def announce_node(body: AnnouncePayload, db: Session = Depends(get_db_dep)):
     
     db.commit()
     return {"ok": True}
+
+class SyncUser(BaseModel):
+    id: str
+    username: str
+    email: str
+    password_hash: str
+    role: str
+    created_at: Optional[str]
+
+@router.get("/users", response_model=List[SyncUser])
+def get_users_delta(db: Session = Depends(get_db_dep)):
+    users = db.query(User).all()
+    res = []
+    for u in users:
+        res.append(SyncUser(
+            id=u.id,
+            username=u.username,
+            email=u.email,
+            password_hash=u.password_hash,
+            role=u.role,
+            created_at=u.created_at.isoformat() if u.created_at else None
+        ))
+    return res

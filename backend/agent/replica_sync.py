@@ -21,26 +21,49 @@ FEDERATION_TOKEN = os.environ.get("FEDERATION_TOKEN", "")
 # Keep track of the last sync timestamp per peer address/IP
 _last_sync_by_peer = {}
 
-async def _fetch_diff_from_peer(peer_addr: str, since: float) -> list:
-    # Handle protocols (default to http if not specified)
+async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, list]:
     base_url = peer_addr
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
         base_url = f"http://{base_url}"
     
-    url = f"{base_url.rstrip('/')}/api/v1/sync/metadata"
+    headers = {"X-Federation-Token": FEDERATION_TOKEN}
     async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(
-            url,
-            params={"since": since},
-            headers={"X-Federation-Token": FEDERATION_TOKEN},
-        )
-        r.raise_for_status()
-        return r.json()
+        # Fetch metadata
+        url_metadata = f"{base_url.rstrip('/')}/api/v1/sync/metadata"
+        r_meta = await client.get(url_metadata, params={"since": since}, headers=headers)
+        r_meta.raise_for_status()
+        
+        # Fetch users
+        url_users = f"{base_url.rstrip('/')}/api/v1/sync/users"
+        r_users = await client.get(url_users, headers=headers)
+        r_users.raise_for_status()
+        
+        return r_meta.json(), r_users.json()
 
-def _apply_peer_diff(files_data: list) -> int:
+def _apply_peer_diff(files_data: list, users_data: list) -> int:
     applied = 0
     with get_db() as db:
-        # Get or create default owner
+        # Sync users first
+        for u_data in users_data:
+            existing_user = db.query(User).filter(User.username == u_data["username"]).first()
+            if not existing_user:
+                created_dt = datetime.fromisoformat(u_data["created_at"]) if u_data.get("created_at") else datetime.utcnow()
+                db.add(User(
+                    id=u_data["id"],
+                    username=u_data["username"],
+                    email=u_data["email"],
+                    password_hash=u_data["password_hash"],
+                    role=u_data["role"],
+                    created_at=created_dt
+                ))
+            else:
+                existing_user.email = u_data["email"]
+                existing_user.password_hash = u_data["password_hash"]
+                existing_user.role = u_data["role"]
+        
+        db.commit()
+
+        # Get or create default owner fallback
         owner = db.query(User).filter(User.role == "owner").first()
         if not owner:
             owner = db.query(User).filter(User.role == "admin").first()
@@ -67,7 +90,6 @@ def _apply_peer_diff(files_data: list) -> int:
                 )
                 db.add(node)
                 db.flush()
-                # Create default cache config for the peer node
                 from models.file_cache import NodeCacheConfig
                 cache_cfg = NodeCacheConfig(
                     id=str(uuid.uuid4()),
@@ -148,8 +170,8 @@ async def sync_peer(peer_node_id: str, addresses: list[str]):
         start_time = time.time()
         try:
             logger.info("Syncing metadata from peer %s via %s (since=%s)", peer_node_id, addr, since)
-            files_data = await _fetch_diff_from_peer(addr, since)
-            count = _apply_peer_diff(files_data)
+            files_data, users_data = await _fetch_diff_from_peer(addr, since)
+            count = _apply_peer_diff(files_data, users_data)
             _last_sync_by_peer[addr] = start_time
             logger.info("Successfully synced %d files from peer %s via %s", count, peer_node_id, addr)
             return True

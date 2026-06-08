@@ -61,14 +61,20 @@ for path in "${ADDR[@]}"; do
     fi
 done
 
-cat <<EOF > docker-compose.yml
-services:
-  backend:
-    build:
+if [ -f "Dockerfile" ]; then
+    IMAGE_BLOCK="    build:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_FALLBACK_NODE_URLS: "https://alphaservers.dns.army"
+        VITE_FALLBACK_NODE_URLS: \"https://alphaservers.dns.army\""
+else
+    IMAGE_BLOCK="    image: wasayabdul51/react-files-hub:latest"
+fi
+
+cat <<EOF > docker-compose.yml
+services:
+  backend:
+${IMAGE_BLOCK}
     env_file: .env
     volumes:
 ${VOLUME_MOUNTS}

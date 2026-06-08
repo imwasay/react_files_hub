@@ -60,6 +60,26 @@ def init_db():
     import models.cache_key
     Base.metadata.create_all(bind=engine)
 
+    from sqlalchemy import text
+    try:
+        with get_db() as db:
+            # Create FTS5 virtual table for full-text search
+            db.execute(text("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
+                    file_id UNINDEXED,
+                    filename,
+                    relative_path,
+                    mime_type,
+                    extracted_text,
+                    content=files,
+                    tokenize='porter unicode61'
+                );
+            """))
+            db.commit()
+        logger.info("FTS5 table verified.")
+    except Exception as e:
+        logger.warning("FTS5 table creation failed: %s", e)
+
     # Clean up duplicate files (keeping one per node_id + real_path)
     from sqlalchemy import text
     try:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -6,8 +6,7 @@ from typing import Optional, List
 from database import get_db_dep
 from middleware.auth_middleware import get_current_user
 from models.user import User
-from models.file import File
-from services.search_service import semantic_search, filename_search, ask_llm
+from services.search_service import search_files
 
 router = APIRouter()
 
@@ -23,12 +22,9 @@ async def search(
     db: Session = Depends(get_db_dep),
     user: User = Depends(get_current_user),
 ):
-    if type == "filename":
-        results, llm_available = filename_search(db, user.id, q, file_type, node_id, page, limit)
-    else:
-        results, llm_available = await semantic_search(db, user.id, q, file_type, node_id, page, limit)
-
-    return {"results": results, "total": len(results), "llm_available": llm_available}
+    # Route all requests to our FTS5 search function
+    results, llm_available = search_files(db, user.id, q, file_type, node_id, page, limit)
+    return {"results": results, "total": len(results), "llm_available": False}
 
 
 class AskRequest(BaseModel):
@@ -42,7 +38,7 @@ async def ask(
     db: Session = Depends(get_db_dep),
     user: User = Depends(get_current_user),
 ):
-    result = await ask_llm(db, user.id, body.q, body.file_ids)
-    if result is None:
-        raise HTTPException(status_code=503, detail="llm_unavailable")
-    return result
+    # Dummy response to prevent frontend crashes since LLM features were removed
+    # The frontend is robust enough to handle 501 gracefully per user instructions.
+    from fastapi import HTTPException
+    raise HTTPException(status_code=501, detail="AI search is currently disabled.")

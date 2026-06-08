@@ -31,13 +31,3 @@ services:
       timeout: 10s
       retries: 3
 
-  # ChromaDB — only needed on Directory nodes for semantic search.
-  # Start with: docker compose --profile directory up -d
-  chromadb:
-    image: chromadb/chroma:latest
-    volumes:
-      - ./data/vectors:/chroma/chroma
-    ports:
-      - "127.0.0.1:8010:8000"
-    restart: unless-stopped
-    profiles: ["directory"]

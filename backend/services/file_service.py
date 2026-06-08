@@ -71,6 +71,48 @@ def resolve_serve_strategy(file: File, user: User) -> dict:
     }
 
 
+async def _bg_download_file(file, ips, cache_path, self_node_db_id):
+    if not file.size_bytes or file.size_bytes > 500 * 1024 * 1024:
+        return
+    import httpx, aiofiles, urllib.parse, os, uuid
+    tmp_path = cache_path + ".tmp"
+    if os.path.exists(tmp_path) or os.path.exists(cache_path):
+        return
+    
+    encoded_path = urllib.parse.quote(file.real_path)
+    req_headers = {"X-Federation-Token": _make_internal_token(file.node.node_id)}
+    
+    async with httpx.AsyncClient() as client:
+        for ip in ips:
+            base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
+            try:
+                async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=30.0) as r:
+                    if r.status_code != 200: continue
+                    async with aiofiles.open(tmp_path, "wb") as f:
+                        async for chunk in r.aiter_bytes(chunk_size=128 * 1024):
+                            await f.write(chunk)
+                os.rename(tmp_path, cache_path)
+                from database import SessionLocal
+                from models.file_cache import FileCache
+                db = SessionLocal()
+                try:
+                    ce = db.query(FileCache).filter(FileCache.file_id == file.id, FileCache.cached_on_node_id == self_node_db_id).first()
+                    if not ce:
+                        ce = FileCache(id=str(uuid.uuid4()), file_id=file.id, cached_on_node_id=self_node_db_id, encrypted_path=cache_path, checksum="", size_bytes=file.size_bytes)
+                        db.add(ce)
+                    else:
+                        ce.size_bytes = file.size_bytes
+                    db.commit()
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error("Failed to update cache DB: %s", e)
+                finally:
+                    db.close()
+                break
+            except Exception:
+                continue
+
+
 async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> StreamingResponse:
     node = file.node
 
@@ -138,18 +180,22 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
             ).first()
 
         cached_bytes = cache_entry.size_bytes if cache_entry else 0
-        if cached_bytes > 0 and not os.path.isfile(cache_path):
+        
+        # If cache is partial or missing but DB says it exists, clear it
+        if cached_bytes > 0 and (cached_bytes != file.size_bytes or not os.path.isfile(cache_path)):
             cached_bytes = 0
             db.delete(cache_entry)
             db.commit()
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
     finally:
         db.close()
 
     async def _stream():
         current_offset = start
 
-        # 1. Yield from local cache if we have the requested bytes
-        if current_offset < cached_bytes:
+        # 1. Yield from local cache ONLY if FULLY cached
+        if cached_bytes > 0 and cached_bytes == file.size_bytes:
             local_end = min(end, cached_bytes - 1) if end is not None else cached_bytes - 1
             try:
                 async with aiofiles.open(cache_path, "rb") as f_local:
@@ -161,86 +207,47 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
                             break
                         yield chunk
                         remaining -= len(chunk)
-                        current_offset += len(chunk)
             except Exception as e:
                 logger.error("Error reading local cache for %s: %s", file.id, e)
                 raise RuntimeError("Cache read failed")
+            return
 
-        # 2. Fetch remainder from origin if needed
-        if end is None or current_offset <= end:
-            # We only append to cache if we're picking up EXACTLY where the cache left off
-            can_cache = (current_offset == cached_bytes)
-            
-            fetch_range = f"bytes={current_offset}-"
-            if end is not None:
-                fetch_range = f"bytes={current_offset}-{end}"
-            
-            req_headers = {
-                "X-Federation-Token": _make_internal_token(serve_node.node_id),
-                "Range": fetch_range
-            }
-            
-            success = False
-            for ip in ips:
-                base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
-                try:
-                    async with httpx.AsyncClient() as client:
-                        from urllib.parse import quote
-                        encoded_path = quote(serve_path, safe="")
-                        
-                        cache_f = None
-                        if can_cache:
-                            cache_f = await aiofiles.open(cache_path, "ab")
-                            
-                        new_cached_bytes = cached_bytes
-                        
-                        try:
-                            async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=5.0) as r:
-                                r.raise_for_status()
-                                async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
-                                    yield chunk
-                                    current_offset += len(chunk)
-                                    if cache_f:
-                                        await cache_f.write(chunk)
-                                        new_cached_bytes += len(chunk)
-                        finally:
-                            if cache_f:
-                                await cache_f.close()
-                                if new_cached_bytes > cached_bytes and self_node_db_id:
-                                    db_update = SessionLocal()
-                                    try:
-                                        ce = db_update.query(FileCache).filter(
-                                            FileCache.file_id == file.id,
-                                            FileCache.cached_on_node_id == self_node_db_id
-                                        ).first()
-                                        if not ce:
-                                            import uuid
-                                            ce = FileCache(
-                                                id=str(uuid.uuid4()),
-                                                file_id=file.id,
-                                                cached_on_node_id=self_node_db_id,
-                                                encrypted_path=cache_path,
-                                                checksum="",
-                                                size_bytes=new_cached_bytes
-                                            )
-                                            db_update.add(ce)
-                                        else:
-                                            ce.size_bytes = new_cached_bytes
-                                        db_update.commit()
-                                    except Exception as e:
-                                        logger.error("Failed to update cache DB: %s", e)
-                                    finally:
-                                        db_update.close()
-                                        
-                    success = True
-                    break  # Stream completed successfully
-                except Exception as e:
-                    logger.warning("Proxy stream failed via IP %s: %s", ip, e)
-                    continue
-            
-            if not success:
-                logger.error("Failed to reach storage node %s on any configured IP", serve_node.node_id)
-                raise RuntimeError("Failed to reach storage node on any configured IP")
+        # 2. Not fully cached — spawn background downloader (if small enough)
+        if self_node_db_id and file.size_bytes and file.size_bytes <= 500 * 1024 * 1024:
+            import asyncio
+            asyncio.create_task(_bg_download_file(file, ips, cache_path, self_node_db_id))
+
+        # 3. Proxy the current request directly from origin (no inline caching)
+        fetch_range = f"bytes={current_offset}-"
+        if end is not None:
+            fetch_range = f"bytes={current_offset}-{end}"
+        
+        req_headers = {
+            "X-Federation-Token": _make_internal_token(serve_node.node_id),
+            "Range": fetch_range
+        }
+        
+        success = False
+        for ip in ips:
+            base_url = f"{ip}/internal/files" if ip.startswith("http") else f"http://{ip}:8000/internal/files"
+            try:
+                async with httpx.AsyncClient() as client:
+                    from urllib.parse import quote
+                    encoded_path = quote(serve_path, safe="")
+                    
+                    async with client.stream("GET", f"{base_url}?path={encoded_path}", headers=req_headers, timeout=5.0) as r:
+                        r.raise_for_status()
+                        async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
+                            yield chunk
+                success = True
+                break  # Stream completed successfully
+            except Exception as e:
+                logger.warning("Proxy stream failed via IP %s: %s", ip, e)
+                continue
+        
+        if not success:
+            logger.error("Failed to reach storage node %s on any configured IP", serve_node.node_id)
+            raise RuntimeError("Failed to reach storage node on any configured IP")
 
     status_code = 206 if range_header else 200
     headers = {

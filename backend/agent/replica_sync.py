@@ -314,3 +314,61 @@ async def start_replica_sync():
             await asyncio.sleep(settings.replica_poll_base + jitter)
 
     asyncio.create_task(_loop())
+
+
+async def start_proactive_caching():
+    """Background task to periodically pick uncached remote files and cache them locally."""
+    from services.file_service import _bg_download_file
+    from models.file_cache import FileCache
+    from sqlalchemy.sql import func
+    
+    async def _loop():
+        # Delay startup to avoid slowing down initial boot/sync
+        await asyncio.sleep(60)
+        while True:
+            try:
+                with get_db() as db:
+                    self_node = db.query(Node).filter(Node.node_id == settings.self_node_id).first()
+                    if not self_node:
+                        await asyncio.sleep(60)
+                        continue
+                    
+                    self_node_db_id = self_node.id
+                    
+                    # Find cached files
+                    subq = db.query(FileCache.file_id).filter(FileCache.cached_on_node_id == self_node_db_id)
+                    
+                    # Pick 5 random files not cached here, owned by remote online nodes, size <= 1GB
+                    uncached = db.query(File).join(Node).filter(
+                        File.node_id != self_node_db_id,
+                        Node.status == "online",
+                        File.size_bytes != None,
+                        File.size_bytes <= 1024 * 1024 * 1024,
+                        ~File.id.in_(subq)
+                    ).order_by(func.random()).limit(5).all()
+                    
+                    for f in uncached:
+                        node = f.node
+                        from config import normalize_node_url
+                        ips = [normalize_node_url(ip) for ip in (node.node_ip or "").split(",") if ip.strip()]
+                        if ips:
+                            cache_dir = "/data/cache"
+                            os.makedirs(cache_dir, exist_ok=True)
+                            cache_path = os.path.join(cache_dir, f.id)
+                            # Start download in background
+                            asyncio.create_task(_bg_download_file(
+                                file_id=f.id,
+                                file_size_bytes=f.size_bytes,
+                                file_real_path=f.real_path,
+                                node_id=node.node_id,
+                                ips=ips,
+                                cache_path=cache_path,
+                                self_node_db_id=self_node_db_id
+                            ))
+            except Exception as e:
+                logger.error("Proactive caching loop failed: %s", e)
+            
+            # Wait a few minutes between sweeps
+            await asyncio.sleep(300)
+            
+    asyncio.create_task(_loop())

@@ -113,11 +113,12 @@ async def lifespan(app: FastAPI):
         import asyncio
         from agent.heartbeat import start_heartbeat
         from agent.watcher import start_watcher, start_watcher_self_node
-        from agent.replica_sync import start_replica_sync
+        from agent.replica_sync import start_replica_sync, start_proactive_caching
         from agent.ingestion import process_queue
         await start_heartbeat()
         await start_watcher()
         await start_replica_sync()
+        await start_proactive_caching()
         asyncio.create_task(start_watcher_self_node())
         asyncio.create_task(process_queue())
         logger.info("Successfully started all background tasks on worker.")
@@ -128,11 +129,12 @@ async def lifespan(app: FastAPI):
         import asyncio
         from agent.heartbeat import start_heartbeat
         from agent.watcher import start_watcher, start_watcher_self_node
-        from agent.replica_sync import start_replica_sync
+        from agent.replica_sync import start_replica_sync, start_proactive_caching
         from agent.ingestion import process_queue
         await start_heartbeat()
         await start_watcher()
         await start_replica_sync()
+        await start_proactive_caching()
         asyncio.create_task(start_watcher_self_node())
         asyncio.create_task(process_queue())
 

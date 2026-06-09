@@ -261,11 +261,34 @@ function NodesTab() {
 
   const STATUS_COLOR: Record<string, string> = { online: '#1D9E75', offline: '#888', degraded: '#BA7517' }
 
+  const fetchInviteToken = async () => {
+    try {
+      const { data } = await api.get('/admin/nodes/invite-token')
+      const host = window.location.origin
+      // Determine the best URL to embed in the token. Use window.location.origin but swap port to 8000 if needed
+      // since the backend sync operates on port 8000, not the frontend port.
+      const syncUrl = host.replace(/:[0-9]+$/, '') + ':8000'
+      const payload = {
+        url: syncUrl,
+        secret: data.jwt_secret
+      }
+      const token = btoa(JSON.stringify(payload))
+      setNToken(`MESH_JOIN_TOKEN=${token}`)
+    } catch (e: any) {
+      alert('Failed to generate invite token')
+    }
+  }
+
   return (
     <>
       <Section
         title="Registered nodes"
-        action={<Btn primary onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ Register node'}</Btn>}
+        action={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn onClick={fetchInviteToken}>🔑 Get Invite Token</Btn>
+            <Btn primary onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ Register node manually'}</Btn>
+          </div>
+        }
       >
         {showForm && (
           <Card style={{ marginBottom: 16 }}>
@@ -281,13 +304,17 @@ function NodesTab() {
               </button>
             </form>
             {nError && <div style={{ marginTop: 8, fontSize: 12, color: '#E24B4A' }}>{nError}</div>}
-            {nToken && (
-              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f0fdf4', borderRadius: 6, border: '1px solid #86efac' }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', marginBottom: 4 }}>✓ Node registered — copy this federation token into the storage node's .env as FEDERATION_TOKEN:</div>
-                <code style={{ fontSize: 11, wordBreak: 'break-all', color: '#15803d' }}>{nToken}</code>
-              </div>
-            )}
           </Card>
+        )}
+
+        {nToken && (
+          <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f0fdf4', borderRadius: 6, border: '1px solid #86efac', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', marginBottom: 4 }}>✓ Token Generated — Give this to the new node owner to paste during setup:</div>
+              <code style={{ fontSize: 11, wordBreak: 'break-all', color: '#15803d' }}>{nToken}</code>
+            </div>
+            <Btn onClick={() => { navigator.clipboard.writeText(nToken); alert('Copied to clipboard!') }} small>Copy</Btn>
+          </div>
         )}
 
         {isLoading && <div style={{ fontSize: 13, color: '#aaa' }}>Loading…</div>}

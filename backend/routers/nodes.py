@@ -83,6 +83,17 @@ def register_node(
 
     return {"node_uuid": node.id, "federation_token": _make_federation_token(body.node_id)}
 
+@router.get("/invite-token")
+def get_invite_token(user: User = Depends(require_admin)):
+    """
+    Returns the required parameters for the frontend to construct a MESH_JOIN_TOKEN.
+    The token will contain the JWT_SECRET and the node's bootstrap URL.
+    """
+    return {
+        "node_id": settings.self_node_id,
+        "jwt_secret": settings.jwt_secret,
+        "suggested_ips": settings.node_ip.split(",") if settings.node_ip else []
+    }
 
 @router.post("/heartbeat")
 def heartbeat(

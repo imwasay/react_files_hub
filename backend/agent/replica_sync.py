@@ -4,7 +4,8 @@ import logging
 import random
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from jose import jwt
 
 from config import get_settings
 from database import get_db
@@ -16,7 +17,13 @@ from models.mapped_root import MappedRoot
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-FEDERATION_TOKEN = os.environ.get("FEDERATION_TOKEN", "")
+def _get_federation_token() -> str:
+    exp = datetime.utcnow() + timedelta(days=365)
+    return jwt.encode(
+        {"node_id": settings.self_node_id, "type": "federation", "exp": exp},
+        settings.jwt_secret,
+        algorithm="HS256",
+    )
 
 # Keep track of the last sync timestamp per peer address/IP
 _last_sync_by_peer = {}
@@ -26,7 +33,7 @@ async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, lis
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
         base_url = f"http://{base_url}"
     
-    headers = {"X-Federation-Token": FEDERATION_TOKEN}
+    headers = {"X-Federation-Token": _get_federation_token()}
     async with httpx.AsyncClient(timeout=15) as client:
         # Fetch metadata
         url_metadata = f"{base_url.rstrip('/')}/api/v1/sync/metadata"

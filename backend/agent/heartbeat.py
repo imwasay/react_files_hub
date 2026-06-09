@@ -2,14 +2,21 @@ import asyncio
 import httpx
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from jose import jwt
 
 from config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-FEDERATION_TOKEN = os.environ.get("FEDERATION_TOKEN", "")
+def _get_federation_token() -> str:
+    exp = datetime.utcnow() + timedelta(days=365)
+    return jwt.encode(
+        {"node_id": settings.self_node_id, "type": "federation", "exp": exp},
+        settings.jwt_secret,
+        algorithm="HS256",
+    )
 
 async def _announce_to_peer(peer_addr: str):
     base_url = peer_addr
@@ -29,7 +36,7 @@ async def _announce_to_peer(peer_addr: str):
                     "addresses": node_ip,
                     "host_os": settings.host_os
                 },
-                headers={"X-Federation-Token": FEDERATION_TOKEN}
+                headers={"X-Federation-Token": _get_federation_token()}
             )
             if r.status_code == 200:
                 logger.debug("Announced successfully to peer %s", peer_addr)

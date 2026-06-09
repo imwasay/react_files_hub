@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     node_id: Optional[str] = None
     storage_roots: str = ""
     peer_nodes: str = ""
+    mesh_join_token: Optional[str] = None
     replica_poll_base: int = 60
     replica_poll_jitter_max: int = 30
     watcher_debounce_ms: int = 2000
@@ -96,4 +97,28 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    
+    if settings.mesh_join_token:
+        try:
+            import base64
+            import json
+            decoded = base64.b64decode(settings.mesh_join_token).decode("utf-8")
+            payload = json.loads(decoded)
+            
+            if "secret" in payload and "url" in payload:
+                settings.jwt_secret = payload["secret"]
+                
+                # Append bootstrap URL to peer nodes if not already present
+                bootstrap_entry = f"bootstrap={payload['url']}"
+                if bootstrap_entry not in settings.peer_nodes:
+                    if settings.peer_nodes:
+                        settings.peer_nodes += ";" + bootstrap_entry
+                    else:
+                        settings.peer_nodes = bootstrap_entry
+                        
+        except Exception as e:
+            # If token is invalid, we fallback to environment variables
+            print(f"Warning: Failed to decode MESH_JOIN_TOKEN: {e}")
+            
+    return settings

@@ -28,7 +28,7 @@ def _get_federation_token() -> str:
 # Keep track of the last sync timestamp per peer address/IP
 _last_sync_by_peer = {}
 
-async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, list]:
+async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, list, list]:
     base_url = peer_addr
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
         base_url = f"http://{base_url}"
@@ -45,9 +45,14 @@ async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, lis
         r_users = await client.get(url_users, headers=headers)
         r_users.raise_for_status()
         
-        return r_meta.json(), r_users.json()
+        # Fetch nodes
+        url_nodes = f"{base_url.rstrip('/')}/api/v1/sync/nodes"
+        r_nodes = await client.get(url_nodes, headers=headers)
+        r_nodes.raise_for_status()
+        
+        return r_meta.json(), r_users.json(), r_nodes.json()
 
-def _apply_peer_diff(files_data: list, users_data: list) -> tuple[int, list]:
+def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list) -> tuple[int, list]:
     applied = 0
     files_to_cache = []
     with get_db() as db:
@@ -85,6 +90,34 @@ def _apply_peer_diff(files_data: list, users_data: list) -> tuple[int, list]:
             db.add(owner)
             db.commit()
             db.refresh(owner)
+
+        # Sync nodes before syncing files
+        for n_data in nodes_data:
+            existing_node = db.query(Node).filter(Node.node_id == n_data["node_id"]).first()
+            if not existing_node:
+                import uuid
+                new_node = Node(
+                    id=n_data["id"],
+                    node_id=n_data["node_id"],
+                    node_ip=n_data["node_ip"],
+                    host_os=n_data["host_os"],
+                    status=n_data["status"],
+                    owner_id=owner.id,
+                    last_seen=datetime.utcnow()
+                )
+                db.add(new_node)
+                from models.file_cache import NodeCacheConfig
+                db.add(NodeCacheConfig(
+                    id=str(uuid.uuid4()),
+                    node_id=new_node.id,
+                    budget_bytes=10 * 1024 ** 3,
+                    used_bytes=0,
+                    eviction_policy="lru"
+                ))
+            else:
+                existing_node.node_ip = n_data["node_ip"]
+                existing_node.status = n_data["status"]
+        db.commit()
 
         for f_data in files_data:
             # 1. Resolve Node
@@ -205,8 +238,8 @@ async def sync_peer(peer_node_id: str, addresses: list[str]):
         start_time = time.time()
         try:
             logger.info("Syncing metadata from peer %s via %s (since=%s)", peer_node_id, addr, since)
-            files_data, users_data = await _fetch_diff_from_peer(addr, since)
-            count, files_to_cache = _apply_peer_diff(files_data, users_data)
+            files_data, users_data, nodes_data = await _fetch_diff_from_peer(addr, since)
+            count, files_to_cache = _apply_peer_diff(files_data, users_data, nodes_data)
             _last_sync_by_peer[addr] = start_time
             logger.info("Successfully synced %d files from peer %s via %s", count, peer_node_id, addr)
             
@@ -226,12 +259,26 @@ async def start_replica_sync():
         # Delay startup sync slightly to let the server initialize fully
         await asyncio.sleep(5)
         while True:
-            # Sync with all peers listed in PEER_NODES config
-            peers = settings.peer_nodes_list
-            if not peers:
+            # Combine static config peers with dynamically discovered peers from the DB
+            peers_dict = {}
+            for nid, addrs in settings.peer_nodes_list:
+                peers_dict[nid] = addrs
+                
+            try:
+                with get_db() as db:
+                    nodes = db.query(Node).all()
+                    for n in nodes:
+                        if n.node_id != settings.self_node_id and n.node_ip:
+                            addrs = [ip.strip() for ip in n.node_ip.split(",") if ip.strip()]
+                            if addrs:
+                                peers_dict[n.node_id] = addrs
+            except Exception as e:
+                logger.error("Failed to fetch dynamic peers from DB: %s", e)
+
+            if not peers_dict:
                 logger.debug("No peer nodes configured for gossip sync.")
             else:
-                for peer_node_id, addresses in peers:
+                for peer_node_id, addresses in peers_dict.items():
                     # Run sync tasks for each peer concurrently
                     asyncio.create_task(sync_peer(peer_node_id, addresses))
             

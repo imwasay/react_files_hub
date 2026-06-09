@@ -263,11 +263,14 @@ function NodesTab() {
 
   const fetchInviteToken = async () => {
     try {
-      const { data } = await api.get('/admin/nodes/invite-token')
-      const host = window.location.origin
-      // Determine the best URL to embed in the token. Use window.location.origin but swap port to 8000 if needed
-      // since the backend sync operates on port 8000, not the frontend port.
-      const syncUrl = host.replace(/:[0-9]+$/, '') + ':8000'
+      const { data } = await api.get('/nodes/invite-token')
+      // Determine the best URL to embed. If the master node configured NODE_IP with multiple routes,
+      // we embed ALL of them comma-separated so the joining node can try them all and fallback!
+      let syncUrl = data.suggested_ips?.join(',')
+      if (!syncUrl) {
+        const host = window.location.origin
+        syncUrl = host.startsWith('https') ? host : host.replace(/:[0-9]+$/, '') + ':8000'
+      }
       const payload = {
         url: syncUrl,
         secret: data.jwt_secret

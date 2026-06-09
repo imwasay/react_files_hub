@@ -130,3 +130,24 @@ def get_users_delta(db: Session = Depends(get_db_dep)):
             created_at=u.created_at.isoformat() if u.created_at else None
         ))
     return res
+
+class SyncNode(BaseModel):
+    id: str
+    node_id: str
+    node_ip: str
+    host_os: str
+    status: str
+
+@router.get("/nodes", response_model=List[SyncNode])
+def get_nodes_delta(db: Session = Depends(get_db_dep)):
+    nodes = db.query(Node).all()
+    res = []
+    for n in nodes:
+        res.append(SyncNode(
+            id=n.id,
+            node_id=n.node_id,
+            node_ip=n.node_ip or "",
+            host_os=n.host_os or "linux",
+            status=n.status or "online"
+        ))
+    return res

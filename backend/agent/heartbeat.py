@@ -50,11 +50,27 @@ async def start_heartbeat():
         # Delay startup slightly to let the server start
         await asyncio.sleep(3)
         while True:
-            peers = settings.peer_nodes_list
-            if not peers:
+            peers_dict = {}
+            for nid, addrs in settings.peer_nodes_list:
+                peers_dict[nid] = addrs
+                
+            try:
+                from database import get_db
+                from models.node import Node
+                with get_db() as db:
+                    nodes = db.query(Node).all()
+                    for n in nodes:
+                        if n.node_id != settings.self_node_id and n.node_ip:
+                            addrs = [ip.strip() for ip in n.node_ip.split(",") if ip.strip()]
+                            if addrs:
+                                peers_dict[n.node_id] = addrs
+            except Exception as e:
+                logger.error("Failed to fetch dynamic peers for heartbeat: %s", e)
+
+            if not peers_dict:
                 logger.debug("No peer nodes configured for heartbeats.")
             else:
-                for peer_node_id, addresses in peers:
+                for peer_node_id, addresses in peers_dict.items():
                     for addr in addresses:
                         asyncio.create_task(_announce_to_peer(addr))
             await asyncio.sleep(60)

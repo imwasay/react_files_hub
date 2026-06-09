@@ -286,9 +286,10 @@ async def stream_file_proxy(file: File, range_header: Optional[str] = None) -> S
             return  # End stream prematurely instead of crashing ASGI
 
     status_code = 206 if range_header else 200
+    from urllib.parse import quote
     headers = {
         "Accept-Ranges": "bytes",
-        "Content-Disposition": f'inline; filename="{file.filename}"'
+        "Content-Disposition": f"inline; filename*=utf-8''{quote(file.filename)}"
     }
     if end is not None:
         headers["Content-Length"] = str(end - start + 1)

@@ -202,9 +202,10 @@ def _stream_local_file(path: str, mime: str, filename: str,
     start = 0
     end = file_size - 1
     status_code = 200
+    from urllib.parse import quote
     headers = {
         "Accept-Ranges": "bytes",
-        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Disposition": f"inline; filename*=utf-8''{quote(filename)}",
         "Content-Length": str(file_size),
     }
 

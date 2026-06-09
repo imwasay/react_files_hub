@@ -87,10 +87,11 @@ async def serve_direct(
                 remaining -= len(data)
                 yield data
 
+    from urllib.parse import quote
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(end - start + 1),
-        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Disposition": f"inline; filename*=utf-8''{quote(filename)}",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Range",
     }
@@ -152,10 +153,11 @@ async def serve_internal_file(
                 remaining -= len(data)
                 yield data
 
+    from urllib.parse import quote
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(end - start + 1),
-        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Disposition": f"inline; filename*=utf-8''{quote(filename)}",
     }
     if status_code == 206:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"

@@ -134,9 +134,12 @@ def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list, roots
                 MappedRoot.logical_name == r_data["logical_name"]
             ).first()
             if not m_root:
+                owner_user = db.query(User).filter(User.username == r_data.get("owner_username", "admin")).first()
+                owner_id = owner_user.id if owner_user else owner.id
                 db.add(MappedRoot(
                     id=r_data["id"],
                     node_id=node.id,
+                    owner_id=owner_id,
                     logical_name=r_data["logical_name"],
                     real_path=r_data["real_path"]
                 ))
@@ -238,7 +241,8 @@ def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list, roots
                 cache_dir = "/data/cache"
                 os.makedirs(cache_dir, exist_ok=True)
                 cache_path = os.path.join(cache_dir, f_data["id"])
-                ips = [ip.strip() for ip in (node.node_ip or "").split(",") if ip.strip()]
+                from config import normalize_node_url
+                ips = [normalize_node_url(ip) for ip in (node.node_ip or "").split(",") if ip.strip()]
                 if ips:
                     files_to_cache.append({
                         "file_id": f_data["id"],
@@ -288,11 +292,12 @@ async def start_replica_sync():
                 peers_dict[nid] = addrs
                 
             try:
+                from config import normalize_node_url
                 with get_db() as db:
                     nodes = db.query(Node).all()
                     for n in nodes:
                         if n.node_id != settings.self_node_id and n.node_ip:
-                            addrs = [ip.strip() for ip in n.node_ip.split(",") if ip.strip()]
+                            addrs = [normalize_node_url(ip) for ip in n.node_ip.split(",") if ip.strip()]
                             if addrs:
                                 peers_dict[n.node_id] = addrs
             except Exception as e:

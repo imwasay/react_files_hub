@@ -79,12 +79,15 @@ def announce_node(body: AnnouncePayload, db: Session = Depends(get_db_dep)):
         db.commit()
         db.refresh(owner)
 
+    from config import normalize_node_url
+    normalized_ips = ",".join([normalize_node_url(ip) for ip in body.addresses.split(",") if ip.strip()])
+    
     if not node:
         import uuid
         node = Node(
             id=str(uuid.uuid4()),
             node_id=body.node_id,
-            node_ip=body.addresses,
+            node_ip=normalized_ips,
             host_os=body.host_os,
             status="online",
             owner_id=owner.id,
@@ -101,7 +104,7 @@ def announce_node(body: AnnouncePayload, db: Session = Depends(get_db_dep)):
         )
         db.add(cache_cfg)
     else:
-        node.node_ip = body.addresses
+        node.node_ip = normalized_ips
         node.status = "online"
         node.last_seen = datetime.utcnow()
     
@@ -166,11 +169,18 @@ def get_roots_delta(db: Session = Depends(get_db_dep)):
     for r in roots:
         if not r.node:
             continue
+        
+        owner_username = "admin"
+        if r.owner_id:
+            user = db.query(User).filter(User.id == r.owner_id).first()
+            if user:
+                owner_username = user.username
+                
         res.append(SyncRoot(
             id=r.id,
             node_id=r.node.node_id,
             logical_name=r.logical_name,
             real_path=r.real_path,
-            owner_username=r.owner.username if r.owner else "admin"
+            owner_username=owner_username
         ))
     return res

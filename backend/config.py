@@ -4,6 +4,17 @@ from typing import Literal, Optional
 from functools import lru_cache
 
 
+def normalize_node_url(url: str) -> str:
+    url = url.strip()
+    if not url: return url
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = f"http://{url}"
+    if url.startswith("http://"):
+        host_part = url[len("http://"):]
+        if ":" not in host_part and "/" not in host_part:
+            url = f"{url}:8000"
+    return url
+
 class Settings(BaseSettings):
     # shared
     node_version: str = "1.0.0"
@@ -58,7 +69,7 @@ class Settings(BaseSettings):
                 parts = item.split("=", 1)
                 if len(parts) == 2:
                     nid, addrs = parts
-                    res.append((nid.strip(), [a.strip() for a in addrs.split(",") if a.strip()]))
+                    res.append((nid.strip(), [normalize_node_url(a) for a in addrs.split(",") if a.strip()]))
         return res
 
     @property
@@ -98,6 +109,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
+    
+    if settings.node_ip:
+        settings.node_ip = ",".join([normalize_node_url(ip) for ip in settings.node_ip.split(",") if ip.strip()])
     
     if settings.mesh_join_token:
         try:

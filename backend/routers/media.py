@@ -13,6 +13,7 @@ import os
 import subprocess
 import json
 import logging
+from urllib.parse import quote
 
 from database import get_db_dep
 from models.file import File
@@ -336,6 +337,6 @@ def get_subtitle(
         media_type="text/vtt; charset=utf-8",
         headers={
             "Cache-Control": "public, max-age=3600",
-            "Content-Disposition": f'inline; filename="{os.path.basename(vtt_path)}"',
+            "Content-Disposition": f"inline; filename*=utf-8''{quote(os.path.basename(vtt_path))}",
         },
     )

@@ -57,11 +57,12 @@ async def start_heartbeat():
             try:
                 from database import get_db
                 from models.node import Node
+                from config import normalize_node_url
                 with get_db() as db:
                     nodes = db.query(Node).all()
                     for n in nodes:
                         if n.node_id != settings.self_node_id and n.node_ip:
-                            addrs = [ip.strip() for ip in n.node_ip.split(",") if ip.strip()]
+                            addrs = [normalize_node_url(ip) for ip in n.node_ip.split(",") if ip.strip()]
                             if addrs:
                                 peers_dict[n.node_id] = addrs
             except Exception as e:

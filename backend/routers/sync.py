@@ -151,3 +151,26 @@ def get_nodes_delta(db: Session = Depends(get_db_dep)):
             status=n.status or "online"
         ))
     return res
+
+class SyncRoot(BaseModel):
+    id: str
+    node_id: str
+    logical_name: str
+    real_path: str
+    owner_username: str
+
+@router.get("/roots", response_model=List[SyncRoot])
+def get_roots_delta(db: Session = Depends(get_db_dep)):
+    roots = db.query(MappedRoot).all()
+    res = []
+    for r in roots:
+        if not r.node:
+            continue
+        res.append(SyncRoot(
+            id=r.id,
+            node_id=r.node.node_id,
+            logical_name=r.logical_name,
+            real_path=r.real_path,
+            owner_username=r.owner.username if r.owner else "admin"
+        ))
+    return res

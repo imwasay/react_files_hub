@@ -28,7 +28,7 @@ def _get_federation_token() -> str:
 # Keep track of the last sync timestamp per peer address/IP
 _last_sync_by_peer = {}
 
-async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, list, list]:
+async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, list, list, list]:
     base_url = peer_addr
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
         base_url = f"http://{base_url}"
@@ -50,9 +50,14 @@ async def _fetch_diff_from_peer(peer_addr: str, since: float) -> tuple[list, lis
         r_nodes = await client.get(url_nodes, headers=headers)
         r_nodes.raise_for_status()
         
-        return r_meta.json(), r_users.json(), r_nodes.json()
+        # Fetch roots
+        url_roots = f"{base_url.rstrip('/')}/api/v1/sync/roots"
+        r_roots = await client.get(url_roots, headers=headers)
+        r_roots.raise_for_status()
+        
+        return r_meta.json(), r_users.json(), r_nodes.json(), r_roots.json()
 
-def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list) -> tuple[int, list]:
+def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list, roots_data: list) -> tuple[int, list]:
     applied = 0
     files_to_cache = []
     with get_db() as db:
@@ -117,6 +122,24 @@ def _apply_peer_diff(files_data: list, users_data: list, nodes_data: list) -> tu
             else:
                 existing_node.node_ip = n_data["node_ip"]
                 existing_node.status = n_data["status"]
+        db.commit()
+
+        # Sync mapped roots
+        for r_data in roots_data:
+            node = db.query(Node).filter(Node.node_id == r_data["node_id"]).first()
+            if not node:
+                continue
+            m_root = db.query(MappedRoot).filter(
+                MappedRoot.node_id == node.id,
+                MappedRoot.logical_name == r_data["logical_name"]
+            ).first()
+            if not m_root:
+                db.add(MappedRoot(
+                    id=r_data["id"],
+                    node_id=node.id,
+                    logical_name=r_data["logical_name"],
+                    real_path=r_data["real_path"]
+                ))
         db.commit()
 
         for f_data in files_data:
@@ -238,8 +261,8 @@ async def sync_peer(peer_node_id: str, addresses: list[str]):
         start_time = time.time()
         try:
             logger.info("Syncing metadata from peer %s via %s (since=%s)", peer_node_id, addr, since)
-            files_data, users_data, nodes_data = await _fetch_diff_from_peer(addr, since)
-            count, files_to_cache = _apply_peer_diff(files_data, users_data, nodes_data)
+            files_data, users_data, nodes_data, roots_data = await _fetch_diff_from_peer(addr, since)
+            count, files_to_cache = _apply_peer_diff(files_data, users_data, nodes_data, roots_data)
             _last_sync_by_peer[addr] = start_time
             logger.info("Successfully synced %d files from peer %s via %s", count, peer_node_id, addr)
             

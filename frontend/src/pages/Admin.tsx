@@ -43,7 +43,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ padding: '12px 16px', borderRadius: 8, border: '1px solid #e0ddd5', background: '#fff', ...style }}>
+    <div style={{ padding: '12px 16px', borderRadius: 8, border: '1px solid var(--border-medium)', background: 'var(--surface-0)', ...style }}>
       {children}
     </div>
   )
@@ -218,12 +218,6 @@ function SystemTab() {
 
 function NodesTab() {
   const qc = useQueryClient()
-  const [showForm, setShowForm] = useState(false)
-  const [nId, setNId] = useState('')
-  const [nWgIp, setNWgIp] = useState('')
-  const [nOwner, setNOwner] = useState('')
-  const [nOs, setNOs] = useState('linux')
-  const [nError, setNError] = useState('')
   const [nToken, setNToken] = useState('')
 
   const { data: nodes, isLoading } = useQuery({
@@ -242,22 +236,6 @@ function NodesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-nodes'] }),
     onError: (e: any) => alert(e.response?.data?.detail || 'Delete failed'),
   })
-
-  const registerNode = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setNError(''); setNToken('')
-    try {
-      const r = await api.post('/admin/nodes', {
-        node_id: nId,
-        node_ip: nWgIp || undefined, owner_username: nOwner, host_os: nOs,
-      })
-      setNToken(r.data.federation_token)
-      qc.invalidateQueries({ queryKey: ['admin-nodes'] })
-      setNId(''); setNWgIp(''); setNOwner('')
-    } catch (e: any) {
-      setNError(e.response?.data?.detail || 'Registration failed')
-    }
-  }
 
   const STATUS_COLOR: Record<string, string> = { online: '#1D9E75', offline: '#888', degraded: '#BA7517' }
 
@@ -289,27 +267,9 @@ function NodesTab() {
         action={
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn onClick={fetchInviteToken}>🔑 Get Invite Token</Btn>
-            <Btn primary onClick={() => setShowForm(v => !v)}>{showForm ? 'Cancel' : '+ Register node manually'}</Btn>
           </div>
         }
       >
-        {showForm && (
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>Register storage node</div>
-            <form onSubmit={registerNode} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
-              <FieldRow label="Node ID" value={nId} onChange={setNId} placeholder="alice-home" required width={160} />
-              <FieldRow label="Node IP (Comma-separated routes)" value={nWgIp} onChange={setNWgIp} placeholder="10.72.0.x, example.com" width={230} />
-              <FieldRow label="Owner username" value={nOwner} onChange={setNOwner} placeholder="admin" required width={140} />
-              <SelectField label="OS" value={nOs} onChange={setNOs}
-                options={[{ value: 'linux', label: 'Linux' }, { value: 'windows', label: 'Windows' }, { value: 'macos', label: 'macOS' }]} />
-              <button type="submit" style={{ padding: '7px 16px', fontSize: 13, borderRadius: 5, background: '#534AB7', color: '#fff', border: 'none', cursor: 'pointer' }}>
-                Register
-              </button>
-            </form>
-            {nError && <div style={{ marginTop: 8, fontSize: 12, color: '#E24B4A' }}>{nError}</div>}
-          </Card>
-        )}
-
         {nToken && (
           <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f0fdf4', borderRadius: 6, border: '1px solid #86efac', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -322,10 +282,10 @@ function NodesTab() {
 
         {isLoading && <div style={{ fontSize: 13, color: '#aaa' }}>Loading…</div>}
 
-        {nodes?.length === 0 && !showForm && (
+        {nodes?.length === 0 && (
           <Card>
             <div style={{ fontSize: 13, color: '#aaa', textAlign: 'center', padding: '16px 0' }}>
-              No nodes yet. The self-node registers automatically on startup. Click "Register node" to add a friend's machine.
+              No nodes yet. The self-node registers automatically on startup. Use "Get Invite Token" to add a friend's machine.
             </div>
           </Card>
         )}

@@ -40,6 +40,13 @@ export const browse = (params?: {
 }): Promise<BrowseResponse> =>
   api.get('/browse', { params }).then(r => r.data)
 
+export const browseShare = (token: string, params?: {
+  path?: string
+  sort?: string
+  order?: string
+}): Promise<BrowseResponse> =>
+  api.get(`/shares/s/${token}/browse`, { params }).then(r => r.data)
+
 export interface MediaInfo {
   file_id: string
   filename: string
@@ -99,3 +106,12 @@ export const getStreamUrl = (fileId: string) =>
 export const getDownloadUrl = (fileId: string) =>
   withToken(`/api/v1/files/${fileId}/download`)
 
+/** Share URL for streaming */
+export const getShareStreamUrl = (token: string, fileId: string) =>
+  `/api/v1/shares/s/${token}/files/${fileId}/stream`
+
+/** Share URL for download */
+export const getShareDownloadUrl = (token: string, fileId?: string) => {
+  if (fileId) return `/api/v1/shares/s/${token}/files/${fileId}/download`
+  return `/api/v1/shares/s/${token}/download`
+}

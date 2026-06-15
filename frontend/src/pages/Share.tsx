@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { resolveShareToken } from '../api/shares'
 import VideoPlayer from '../components/VideoPlayer'
+import Browse from './Browse'
 
 const TYPE_ICONS: Record<string, { emoji: string; color: string }> = {
   video: { emoji: '▶', color: '#ef4444' },
@@ -146,6 +147,75 @@ export default function Share() {
   const typeInfo = TYPE_ICONS[data?.file_type] || TYPE_ICONS.other
   const isPlayable = data?.file_type === 'video' || data?.file_type === 'audio'
   const isImage = data?.file_type === 'image'
+
+  if (data?.target_type === 'root') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'var(--bg-color, #0f172a)',
+      }}>
+        <div style={{
+          padding: '1.5rem',
+          background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+          borderBottom: '1px solid rgba(148,163,184,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+        }}>
+          <div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+              color: '#06b6d4', fontSize: '0.75rem', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              Shared Folder
+            </div>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', fontWeight: 700 }}>{data.filename}</h1>
+          </div>
+          <a
+            href={data.download_url}
+            className="share-download-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.625rem 1.25rem',
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              textDecoration: 'none',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 4px 15px rgba(6,182,212,0.25)',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download Folder
+          </a>
+        </div>
+        <div style={{ padding: '1.5rem', maxWidth: 1400, margin: '0 auto' }}>
+          <Browse shareToken={token} />
+        </div>
+        <style>{`
+          .share-download-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(6,182,212,0.35) !important; }
+        `}</style>
+      </div>
+    )
+  }
 
   return (
     <div style={{

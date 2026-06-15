@@ -255,6 +255,7 @@ export default function ShareModal({ target, onClose }: Props) {
                   value={customDate}
                   onChange={e => setCustomDate(e.target.value)}
                   min={new Date().toISOString().slice(0, 16)}
+                  max="9999-12-31T23:59"
                   className="input"
                   style={{ width: '100%', fontSize: '0.8125rem' }}
                 />

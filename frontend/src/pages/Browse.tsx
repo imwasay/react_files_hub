@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { browse, type BrowseItem, type BrowseResponse, getDownloadUrl, getStreamUrl } from '../api/browse'
+import { browse, browseShare, getShareDownloadUrl, getShareStreamUrl, type BrowseItem, type BrowseResponse, getDownloadUrl, getStreamUrl } from '../api/browse'
 import { usePreferences } from '../store/preferences'
 import FolderCard from '../components/FolderCard'
 import FileCard from '../components/FileCard'
@@ -9,10 +9,12 @@ import FileRow from '../components/FileRow'
 import ImageViewer from '../components/ImageViewer'
 import ShareModal from '../components/ShareModal'
 
-export default function Browse() {
+export default function Browse({ shareToken }: { shareToken?: string }) {
   const navigate = useNavigate()
   const params = useParams()
-  const path = params['*'] || ''
+  const routePath = params['*'] || ''
+  const [localPath, setLocalPath] = useState('')
+  const path = shareToken ? localPath : routePath
   const { viewMode, sortBy, sortOrder } = usePreferences()
 
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
@@ -20,8 +22,10 @@ export default function Browse() {
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
 
   const { data, isLoading, error } = useQuery<BrowseResponse>({
-    queryKey: ['browse', path, sortBy, sortOrder],
-    queryFn: () => browse({ path: path || undefined, sort: sortBy, order: sortOrder }),
+    queryKey: ['browse', shareToken || 'local', path, sortBy, sortOrder],
+    queryFn: () => shareToken
+      ? browseShare(shareToken, { path: path || undefined, sort: sortBy, order: sortOrder })
+      : browse({ path: path || undefined, sort: sortBy, order: sortOrder }),
   })
 
   const items = data?.items || []
@@ -30,14 +34,22 @@ export default function Browse() {
   const imageFiles = files.filter(f => f.file_type === 'image')
 
   const handleFolderNav = useCallback((p: string) => {
-    navigate(`/browse/${p}`)
-  }, [navigate])
+    if (shareToken) {
+      setLocalPath(p)
+    } else {
+      navigate(`/browse/${p}`)
+    }
+  }, [navigate, shareToken])
 
   const handleFileClick = useCallback((item: BrowseItem) => {
     if (!item.file_id) return
 
     if (item.file_type === 'video' || item.file_type === 'audio') {
-      navigate(`/play/${item.file_id}`)
+      if (shareToken) {
+        window.open(getShareStreamUrl(shareToken, item.file_id), '_blank')
+      } else {
+        navigate(`/play/${item.file_id}`)
+      }
     } else if (item.file_type === 'image') {
       const idx = imageFiles.findIndex(f => f.file_id === item.file_id)
       if (idx >= 0) {
@@ -45,11 +57,15 @@ export default function Browse() {
         setImageViewerOpen(true)
       }
     } else if (item.file_type === 'document' || /\.(pdf|docx|xlsx|pptx|csv|md|txt)\s*$/i.test(item.name || '')) {
-      navigate(`/doc/${item.file_id}`)
+      if (shareToken) {
+        window.open(getShareStreamUrl(shareToken, item.file_id), '_blank')
+      } else {
+        navigate(`/doc/${item.file_id}`)
+      }
     } else {
-      window.open(getDownloadUrl(item.file_id!), '_blank')
+      window.open(shareToken ? getShareDownloadUrl(shareToken, item.file_id) : getDownloadUrl(item.file_id!), '_blank')
     }
-  }, [navigate, imageFiles])
+  }, [navigate, imageFiles, shareToken])
 
   const handleShareFile = useCallback((fileId: string, filename: string) => {
     setShareTarget({ id: fileId, name: filename, type: 'file' })
@@ -128,7 +144,7 @@ export default function Browse() {
                     itemCount={f.item_count}
                     nodeStatus={f.node_status}
                     onNavigate={handleFolderNav}
-                    onShare={f.root_id ? (path, name) => handleShareFolder(path, name, f.root_id) : undefined}
+                    onShare={(!shareToken && f.root_id) ? (path, name) => handleShareFolder(path, name, f.root_id) : undefined}
                     style={{ animationDelay: `${i * 30}ms` }}
                   />
                 ))}
@@ -186,7 +202,7 @@ export default function Browse() {
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}
-                      onShare={f.file_id ? handleShareFile : undefined}
+                      onShare={(!shareToken && f.file_id) ? handleShareFile : undefined}
                     />
                   ))}
                 </div>
@@ -214,7 +230,7 @@ export default function Browse() {
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}
-                      onShare={f.file_id ? handleShareFile : undefined}
+                      onShare={(!shareToken && f.file_id) ? handleShareFile : undefined}
                       style={{ animationDelay: `${i * 30}ms` }}
                     />
                   ))}
@@ -231,8 +247,8 @@ export default function Browse() {
           images={imageFiles.map(f => ({
             fileId: f.file_id!,
             filename: f.name,
-            downloadUrl: getDownloadUrl(f.file_id!),
-            streamUrl: getStreamUrl(f.file_id!),
+            downloadUrl: shareToken ? getShareDownloadUrl(shareToken, f.file_id!) : getDownloadUrl(f.file_id!),
+            streamUrl: shareToken ? getShareStreamUrl(shareToken, f.file_id!) : getStreamUrl(f.file_id!),
           }))}
           startIndex={imageViewerIndex}
           onClose={() => setImageViewerOpen(false)}

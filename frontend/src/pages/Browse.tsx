@@ -8,6 +8,7 @@ import FileCard from '../components/FileCard'
 import FileRow from '../components/FileRow'
 import ImageViewer from '../components/ImageViewer'
 import ShareModal from '../components/ShareModal'
+import UniversalViewer from '../components/UniversalViewer'
 
 export default function Browse({ shareToken }: { shareToken?: string }) {
   const navigate = useNavigate()
@@ -20,6 +21,9 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const [imageViewerIndex, setImageViewerIndex] = useState(0)
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
+  
+  const [docViewerOpen, setDocViewerOpen] = useState(false)
+  const [docViewerItem, setDocViewerItem] = useState<BrowseItem | null>(null)
 
   const { data, isLoading, error } = useQuery<BrowseResponse>({
     queryKey: ['browse', shareToken || 'local', path, sortBy, sortOrder],
@@ -56,9 +60,10 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
         setImageViewerIndex(idx)
         setImageViewerOpen(true)
       }
-    } else if (item.file_type === 'document' || /\.(pdf|docx|xlsx|pptx|csv|md|txt)\s*$/i.test(item.name || '')) {
+    } else if (item.file_type === 'document' || /\.(pdf|docx|doc|xlsx|xls|csv|pptx|md|txt|json|xml|yaml|yml|log|ini|conf|sh|py|js|ts|jsx|tsx|html|css)\s*$/i.test(item.name || '')) {
       if (shareToken) {
-        window.open(getShareStreamUrl(shareToken, item.file_id), '_blank')
+        setDocViewerItem(item)
+        setDocViewerOpen(true)
       } else {
         navigate(`/doc/${item.file_id}`)
       }
@@ -259,6 +264,19 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
         <ShareModal
           target={shareTarget}
           onClose={() => setShareTarget(null)}
+        />
+      )}
+
+      {docViewerOpen && docViewerItem && shareToken && (
+        <UniversalViewer
+          fileId={docViewerItem.file_id!}
+          filename={docViewerItem.name}
+          streamUrl={getShareStreamUrl(shareToken, docViewerItem.file_id!)}
+          downloadUrl={getShareDownloadUrl(shareToken, docViewerItem.file_id!)}
+          onClose={() => {
+            setDocViewerOpen(false)
+            setDocViewerItem(null)
+          }}
         />
       )}
     </div>

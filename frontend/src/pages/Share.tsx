@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { resolveShareToken } from '../api/shares'
 import VideoPlayer from '../components/VideoPlayer'
 import Browse from './Browse'
+import UniversalViewer from '../components/UniversalViewer'
 
 const TYPE_ICONS: Record<string, { emoji: string; color: string }> = {
   video: { emoji: '▶', color: '#ef4444' },
@@ -26,6 +27,7 @@ export default function Share() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showDoc, setShowDoc] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -147,6 +149,7 @@ export default function Share() {
   const typeInfo = TYPE_ICONS[data?.file_type] || TYPE_ICONS.other
   const isPlayable = data?.file_type === 'video' || data?.file_type === 'audio'
   const isImage = data?.file_type === 'image'
+  const isDocument = data?.file_type === 'document' || /\.(pdf|docx|doc|xlsx|xls|csv|pptx|md|txt|json|xml|yaml|yml|log|ini|conf|sh|py|js|ts|jsx|tsx|html|css)\s*$/i.test(data?.filename || '')
 
   if (data?.target_type === 'root') {
     return (
@@ -340,6 +343,67 @@ export default function Share() {
                 }}
               />
             </div>
+          ) : isDocument ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '4rem', marginBottom: '1rem', opacity: 0.6 }}>
+                {typeInfo.emoji}
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                This document can be previewed directly in the browser.
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setShowDoc(true)}
+                  className="share-download-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.75rem 2rem',
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '0.9375rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(139,92,246,0.3)',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  Preview Document
+                </button>
+                <a
+                  href={data?.download_url || data?.stream_url}
+                  download={data?.filename}
+                  className="share-download-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.75rem 2rem',
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '0.9375rem',
+                    textDecoration: 'none',
+                    transition: 'all 0.25s ease',
+                    boxShadow: '0 4px 15px rgba(6,182,212,0.3)',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Download {data?.filename}
+                </a>
+              </div>
+            </div>
           ) : (
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '4rem', marginBottom: '1rem', opacity: 0.6 }}>
@@ -349,7 +413,7 @@ export default function Share() {
                 Preview not available for this file type
               </div>
               <a
-                href={data?.stream_url}
+                href={data?.download_url || data?.stream_url}
                 download={data?.filename}
                 className="share-download-btn"
                 style={{
@@ -383,6 +447,16 @@ export default function Share() {
       <div style={{ textAlign: 'center', marginTop: '2rem', color: '#475569', fontSize: '0.75rem' }}>
         Shared securely via Files Hub · {window.location.hostname}
       </div>
+
+      {showDoc && (
+        <UniversalViewer
+          fileId={data.file_id}
+          filename={data.filename}
+          streamUrl={data.stream_url}
+          downloadUrl={data.download_url}
+          onClose={() => setShowDoc(false)}
+        />
+      )}
     </div>
   )
 }

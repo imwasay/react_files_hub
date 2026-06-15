@@ -173,7 +173,7 @@ export default function Search() {
 
 /* ── Search result row with inline share button ─────────────────────────── */
 function SearchResultRow({ result, onClick }: { result: any; onClick: () => void }) {
-  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' | 'folder'; subpath?: string } | null>(null)
   const [shareHovered, setShareHovered] = useState(false)
 
   return (

@@ -20,7 +20,7 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
 
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const [imageViewerIndex, setImageViewerIndex] = useState(0)
-  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' | 'folder'; subpath?: string } | null>(null)
   
   const [docViewerOpen, setDocViewerOpen] = useState(false)
   const [docViewerItem, setDocViewerItem] = useState<BrowseItem | null>(null)

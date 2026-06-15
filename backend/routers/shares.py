@@ -43,6 +43,8 @@ def create_share(
         expires_at=body.expires_at,
     )
     db.add(share)
+    db.commit()  # persist to DB
+    db.refresh(share)
     return {
         "share_id": share.id,
         "token": token,
@@ -72,18 +74,7 @@ def list_shares(
     ]
 
 
-@router.delete("/{share_id}", status_code=204)
-def delete_share(
-    share_id: str,
-    db: Session = Depends(get_db_dep),
-    user: User = Depends(get_current_user),
-):
-    share = db.query(Share).filter(Share.id == share_id, Share.granted_by == user.id).first()
-    if not share:
-        raise HTTPException(status_code=404, detail="Share not found")
-    db.delete(share)
-
-
+# NOTE: /s/{token} must be declared BEFORE /{share_id} to avoid route ambiguity
 @router.get("/s/{token}")
 def resolve_share(token: str, db: Session = Depends(get_db_dep)):
     share = db.query(Share).filter(Share.token == token).first()
@@ -103,6 +94,20 @@ def resolve_share(token: str, db: Session = Depends(get_db_dep)):
         "filename": f.filename,
         "file_type": f.file_type,
         "size_bytes": f.size_bytes,
-        "node_status": f.node.status,
+        "node_status": f.node.status if f.node else None,
         "stream_url": f"/api/v1/files/{f.id}/stream",
+        "download_url": f"/api/v1/files/{f.id}/download",
     }
+
+
+@router.delete("/{share_id}", status_code=204)
+def delete_share(
+    share_id: str,
+    db: Session = Depends(get_db_dep),
+    user: User = Depends(get_current_user),
+):
+    share = db.query(Share).filter(Share.id == share_id, Share.granted_by == user.id).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    db.delete(share)
+    db.commit()  # persist deletion

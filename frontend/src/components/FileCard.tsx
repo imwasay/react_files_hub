@@ -43,14 +43,16 @@ interface FileCardProps {
   isCached?: boolean
   indexStatus?: string
   onClick: () => void
+  onShare?: (fileId: string, filename: string) => void
   style?: React.CSSProperties
 }
 
 export default function FileCard({
   fileId, filename, fileType, mimeType, sizeBytes, modifiedAt,
-  hasThumbnail, nodeStatus, nodeReachable, isCached, indexStatus, onClick, style,
+  hasThumbnail, nodeStatus, nodeReachable, isCached, indexStatus, onClick, onShare, style,
 }: FileCardProps) {
   const [thumbErr, setThumbErr] = useState(false)
+  const [shareHovered, setShareHovered] = useState(false)
   const typeInfo = TYPE_ICONS[fileType] || TYPE_ICONS.other
   const isOffline = nodeReachable === false && !isCached
 
@@ -177,16 +179,49 @@ export default function FileCard({
         <div style={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: '0.375rem',
           marginTop: '0.125rem',
         }}>
-          {nodeStatus && (
-            <span className={`badge badge-${nodeStatus === 'online' ? 'online' : isCached ? 'cached' : 'offline'}`}>
-              {isCached ? 'cached' : nodeStatus}
-            </span>
-          )}
-          {indexStatus === 'indexed' && (
-            <span className="badge badge-indexed">AI</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            {nodeStatus && (
+              <span className={`badge badge-${nodeStatus === 'online' ? 'online' : isCached ? 'cached' : 'offline'}`}>
+                {isCached ? 'cached' : nodeStatus}
+              </span>
+            )}
+            {indexStatus === 'indexed' && (
+              <span className="badge badge-indexed">AI</span>
+            )}
+          </div>
+          {onShare && !isOffline && (
+            <button
+              title="Share"
+              onClick={e => { e.stopPropagation(); onShare(fileId, filename) }}
+              onMouseOver={() => setShareHovered(true)}
+              onMouseOut={() => setShareHovered(false)}
+              style={{
+                padding: '0.2rem 0.4rem',
+                borderRadius: 6,
+                border: '1px solid',
+                borderColor: shareHovered ? 'rgba(6,182,212,0.4)' : 'rgba(148,163,184,0.15)',
+                background: shareHovered ? 'rgba(6,182,212,0.12)' : 'transparent',
+                color: shareHovered ? 'var(--accent-primary)' : 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              Share
+            </button>
           )}
         </div>
       </div>

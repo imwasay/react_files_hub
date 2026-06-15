@@ -32,11 +32,11 @@ else
     exit 1
 fi
 
-echo -e "${YELLOW}Restarting local containers to pick up the new image...${NC}"
-docker compose pull
-docker compose down
-docker compose up -d
-echo -e "${GREEN}Containers restarted successfully.${NC}"
+# echo -e "${YELLOW}Restarting local containers to pick up the new image...${NC}"
+# docker compose pull
+# docker compose down
+# docker compose up -d
+# echo -e "${GREEN}Containers restarted successfully.${NC}"
 
 # echo -e "${YELLOW}Restarting remote containers to pick up the new image...${NC}"
 # ssh 10.0.0.5 "cd ~/prod/react_files_hub && docker compose pull && docker compose down && docker compose up -d"

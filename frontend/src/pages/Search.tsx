@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { search, askLLM } from '../api/shares'
+import ShareModal from '../components/ShareModal'
 
 export default function Search() {
   const navigate = useNavigate()
@@ -150,35 +151,11 @@ export default function Search() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {data?.results?.map((r: any) => (
-          <div
+          <SearchResultRow
             key={r.file_id}
+            result={r}
             onClick={() => handleResultClick(r)}
-            className="glass-card"
-            style={{
-              padding: '0.75rem 1rem',
-              cursor: 'pointer',
-            }}
-          >
-            <div style={{
-              fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-heading)',
-              marginBottom: '0.125rem',
-            }}>
-              {r.name}
-            </div>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              {r.path}
-            </div>
-            {r.snippet && (
-              <div style={{
-                marginTop: '0.375rem',
-                fontSize: '0.8125rem',
-                color: 'var(--text-secondary)',
-                fontStyle: 'italic',
-              }}>
-                "{r.snippet}..."
-              </div>
-            )}
-          </div>
+          />
         ))}
         {submitted && !isLoading && data?.results?.length === 0 && (
           <div style={{
@@ -191,5 +168,94 @@ export default function Search() {
         )}
       </div>
     </div>
+  )
+}
+
+/* ── Search result row with inline share button ─────────────────────────── */
+function SearchResultRow({ result, onClick }: { result: any; onClick: () => void }) {
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
+  const [shareHovered, setShareHovered] = useState(false)
+
+  return (
+    <>
+      <div
+        className="glass-card"
+        style={{
+          padding: '0.75rem 1rem',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+        }}
+      >
+        <div
+          onClick={onClick}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          <div style={{
+            fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-heading)',
+            marginBottom: '0.125rem',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {result.name}
+          </div>
+          <div style={{
+            fontSize: '0.6875rem', color: 'var(--text-muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {result.path}
+          </div>
+          {result.snippet && (
+            <div style={{
+              marginTop: '0.375rem',
+              fontSize: '0.8125rem',
+              color: 'var(--text-secondary)',
+              fontStyle: 'italic',
+            }}>
+              "{result.snippet}..."
+            </div>
+          )}
+        </div>
+
+        {result.file_id && (
+          <button
+            title="Share"
+            onClick={e => { e.stopPropagation(); setShareTarget({ id: result.file_id, name: result.name, type: 'file' }) }}
+            onMouseOver={() => setShareHovered(true)}
+            onMouseOut={() => setShareHovered(false)}
+            style={{
+              padding: '0.3rem 0.6rem',
+              borderRadius: 7,
+              border: '1px solid',
+              borderColor: shareHovered ? 'rgba(6,182,212,0.4)' : 'rgba(148,163,184,0.15)',
+              background: shareHovered ? 'rgba(6,182,212,0.12)' : 'transparent',
+              color: shareHovered ? 'var(--accent-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              transition: 'all 0.15s',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            Share
+          </button>
+        )}
+      </div>
+
+      {shareTarget && (
+        <ShareModal
+          target={shareTarget}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
+    </>
   )
 }

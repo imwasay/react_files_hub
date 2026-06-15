@@ -7,6 +7,7 @@ import FolderCard from '../components/FolderCard'
 import FileCard from '../components/FileCard'
 import FileRow from '../components/FileRow'
 import ImageViewer from '../components/ImageViewer'
+import ShareModal from '../components/ShareModal'
 
 export default function Browse() {
   const navigate = useNavigate()
@@ -16,6 +17,7 @@ export default function Browse() {
 
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const [imageViewerIndex, setImageViewerIndex] = useState(0)
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; type: 'file' | 'root' } | null>(null)
 
   const { data, isLoading, error } = useQuery<BrowseResponse>({
     queryKey: ['browse', path, sortBy, sortOrder],
@@ -48,6 +50,15 @@ export default function Browse() {
       window.open(getDownloadUrl(item.file_id!), '_blank')
     }
   }, [navigate, imageFiles])
+
+  const handleShareFile = useCallback((fileId: string, filename: string) => {
+    setShareTarget({ id: fileId, name: filename, type: 'file' })
+  }, [])
+
+  const handleShareFolder = useCallback((path: string, name: string, rootId?: string) => {
+    if (!rootId) return // sub-folders are virtual, can't be shared directly
+    setShareTarget({ id: rootId, name, type: 'root' })
+  }, [])
 
   // ── Breadcrumbs ──────────────────────────────────────────────────────────
   const breadcrumbs = data?.breadcrumbs || []
@@ -117,6 +128,7 @@ export default function Browse() {
                     itemCount={f.item_count}
                     nodeStatus={f.node_status}
                     onNavigate={handleFolderNav}
+                    onShare={f.root_id ? (path, name) => handleShareFolder(path, name, f.root_id) : undefined}
                     style={{ animationDelay: `${i * 30}ms` }}
                   />
                 ))}
@@ -174,6 +186,7 @@ export default function Browse() {
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}
+                      onShare={f.file_id ? handleShareFile : undefined}
                     />
                   ))}
                 </div>
@@ -201,6 +214,7 @@ export default function Browse() {
                       isCached={f.is_cached}
                       indexStatus={f.index_status}
                       onClick={() => handleFileClick(f)}
+                      onShare={f.file_id ? handleShareFile : undefined}
                       style={{ animationDelay: `${i * 30}ms` }}
                     />
                   ))}
@@ -222,6 +236,13 @@ export default function Browse() {
           }))}
           startIndex={imageViewerIndex}
           onClose={() => setImageViewerOpen(false)}
+        />
+      )}
+
+      {shareTarget && (
+        <ShareModal
+          target={shareTarget}
+          onClose={() => setShareTarget(null)}
         />
       )}
     </div>

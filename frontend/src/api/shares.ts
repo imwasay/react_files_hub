@@ -2,8 +2,9 @@ import api from './client'
 
 // shares
 export const createShare = (body: {
-  target_type: 'file' | 'root'
+  target_type: 'file' | 'root' | 'folder'
   target_id: string
+  subpath?: string
   granted_to?: string
   access_level?: string
   allow_reshare?: boolean

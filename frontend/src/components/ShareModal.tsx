@@ -6,7 +6,8 @@ type ExpiryPreset = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom'
 interface ShareTarget {
   id: string
   name: string
-  type: 'file' | 'root'
+  type: 'file' | 'root' | 'folder'
+  subpath?: string
 }
 
 interface Props {
@@ -96,6 +97,7 @@ export default function ShareModal({ target, onClose }: Props) {
       const res = await createShare({
         target_type: target.type,
         target_id: target.id,
+        subpath: target.subpath,
         expires_at,
       })
       const url = `${window.location.origin}/s/${res.token}`
@@ -122,7 +124,7 @@ export default function ShareModal({ target, onClose }: Props) {
     }
   }, [generatedUrl, target.name])
 
-  const isFolder = target.type === 'root'
+  const isFolder = target.type === 'root' || target.type === 'folder'
 
   return (
     <div

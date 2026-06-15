@@ -10,6 +10,7 @@ class Share(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     file_id = Column(String, ForeignKey("files.id"), nullable=True)
     mapped_root_id = Column(String, ForeignKey("mapped_roots.id"), nullable=True)
+    subpath = Column(String, nullable=True)
     granted_by = Column(String, ForeignKey("users.id"), nullable=False)
     granted_to = Column(String, ForeignKey("users.id"), nullable=True)  # null = public
     access_level = Column(String, default="read")

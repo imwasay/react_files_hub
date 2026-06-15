@@ -77,9 +77,19 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
   }, [])
 
   const handleShareFolder = useCallback((path: string, name: string, rootId?: string) => {
-    if (!rootId) return // sub-folders are virtual, can't be shared directly
-    setShareTarget({ id: rootId, name, type: 'root' })
-  }, [])
+    // rootId is always from top-level folders, sub-folders share via the parent root + subpath
+    const effectiveRootId = rootId || data?.root_id
+    if (!effectiveRootId) return
+    // Determine if this is a sub-folder share (path has more than one segment after root name)
+    const rootName = data?.root_name || ''
+    const rootNameClean = rootName.replace(/^\//, '')
+    let subpath: string | undefined
+    if (!rootId) {
+      // This is a sub-folder — path is relative to the current browse context
+      subpath = path
+    }
+    setShareTarget({ id: effectiveRootId, name, type: rootId ? 'root' : 'folder', subpath })
+  }, [data])
 
   // ── Breadcrumbs ──────────────────────────────────────────────────────────
   const breadcrumbs = data?.breadcrumbs || []
@@ -149,7 +159,7 @@ export default function Browse({ shareToken }: { shareToken?: string }) {
                     itemCount={f.item_count}
                     nodeStatus={f.node_status}
                     onNavigate={handleFolderNav}
-                    onShare={(!shareToken && f.root_id) ? (path, name) => handleShareFolder(path, name, f.root_id) : undefined}
+                    onShare={!shareToken ? (path, name) => handleShareFolder(path, name, f.root_id) : undefined}
                     style={{ animationDelay: `${i * 30}ms` }}
                   />
                 ))}

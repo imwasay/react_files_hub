@@ -11,6 +11,7 @@ import uuid, secrets, os, tempfile, shutil
 from database import get_db_dep
 from models.share import Share
 from models.file import File
+from models.mapped_root import MappedRoot
 from middleware.auth_middleware import get_current_user
 from models.user import User
 from config import get_settings
@@ -19,8 +20,9 @@ router = APIRouter()
 
 
 class CreateShareRequest(BaseModel):
-    target_type: str  # file | root
+    target_type: str  # file | root | folder
     target_id: str
+    subpath: Optional[str] = None
     granted_to: Optional[str] = None
     access_level: str = "read"
     allow_reshare: bool = False
@@ -37,7 +39,8 @@ def create_share(
     share = Share(
         id=str(uuid.uuid4()),
         file_id=body.target_id if body.target_type == "file" else None,
-        mapped_root_id=body.target_id if body.target_type == "root" else None,
+        mapped_root_id=body.target_id if body.target_type in ("root", "folder") else None,
+        subpath=body.subpath if body.target_type == "folder" else None,
         granted_by=user.id,
         granted_to=body.granted_to,
         access_level=body.access_level,
@@ -66,8 +69,9 @@ def list_shares(
     return [
         {
             "share_id": s.id,
-            "target_type": "file" if s.file_id else "root",
+            "target_type": "folder" if s.subpath else "file" if s.file_id else "root",
             "target_id": s.file_id or s.mapped_root_id,
+            "subpath": s.subpath,
             "granted_to": s.granted_to,
             "is_public": s.is_public,
             "share_url": f"/s/{s.token}",
@@ -90,13 +94,14 @@ def resolve_share(token: str, db: Session = Depends(get_db_dep)):
         return {"requires_auth": True}
 
     if share.mapped_root_id:
-        root = share.mapped_root
+        root = db.query(MappedRoot).filter(MappedRoot.id == share.mapped_root_id).first()
         if not root:
             raise HTTPException(status_code=404, detail="Folder not found")
         return {
-            "target_type": "root",
+            "target_type": "folder" if share.subpath else "root",
             "root_id": root.id,
-            "filename": root.logical_name,
+            "subpath": share.subpath,
+            "filename": share.subpath.split("/")[-1] if share.subpath else root.logical_name,
             "node_status": root.node.status if root.node else None,
             "download_url": f"/api/v1/shares/s/{token}/download",
             "browse_url": f"/api/v1/shares/s/{token}/browse",
@@ -148,7 +153,7 @@ def download_share(token: str, db: Session = Depends(get_db_dep)):
         pass
 
     if share.mapped_root_id:
-        root = share.mapped_root
+        root = db.query(MappedRoot).filter(MappedRoot.id == share.mapped_root_id).first()
         if not root:
             raise HTTPException(status_code=404, detail="Folder not found")
             
@@ -159,17 +164,25 @@ def download_share(token: str, db: Session = Depends(get_db_dep)):
         if not os.path.isdir(root.real_path):
             raise HTTPException(status_code=404, detail="Folder path not found on disk")
             
+        target_dir = root.real_path
+        if share.subpath:
+            target_dir = os.path.join(root.real_path, share.subpath)
+            if not os.path.isdir(target_dir):
+                raise HTTPException(status_code=404, detail="Shared subfolder not found on disk")
+            
         fd, temp_path = tempfile.mkstemp(suffix=".zip")
         os.close(fd)
         
         base_name = temp_path[:-4]
-        shutil.make_archive(base_name, 'zip', root.real_path)
+        shutil.make_archive(base_name, 'zip', target_dir)
         zip_path = base_name + ".zip"
+        
+        filename_zip = f"{share.subpath.split('/')[-1]}.zip" if share.subpath else f"{root.logical_name}.zip"
         
         return FileResponse(
             zip_path,
             media_type="application/zip",
-            filename=f"{root.logical_name}.zip",
+            filename=filename_zip,
             background=BackgroundTask(os.remove, zip_path)
         )
 
@@ -190,6 +203,12 @@ async def stream_share_file(token: str, file_id: str, request: Request, db: Sess
         raise HTTPException(status_code=403, detail="File not in share")
     elif share.mapped_root_id and share.mapped_root_id != f.mapped_root_id:
         raise HTTPException(status_code=403, detail="File not in shared folder")
+        
+    if share.subpath:
+        root = db.query(MappedRoot).filter(MappedRoot.id == share.mapped_root_id).first()
+        prefix = f"{root.logical_name.rstrip('/')}/{share.subpath.strip('/')}/"
+        if not f.logical_path.startswith(prefix):
+            raise HTTPException(status_code=403, detail="File not in shared subfolder")
 
     from routers.files import stream_file_proxy, _stream_local_file
     settings = get_settings()
@@ -222,18 +241,26 @@ def browse_share(
     if share.expires_at and share.expires_at < datetime.utcnow():
         raise HTTPException(status_code=410, detail="Share link expired")
         
-    root = share.mapped_root
+        
+    root = db.query(MappedRoot).filter(MappedRoot.id == share.mapped_root_id).first()
     if not root:
         raise HTTPException(status_code=404, detail="Folder not found")
         
-    path_clean = path.strip("/") if path else ""
-    parts = [p for p in path_clean.split("/") if p]
+    req_path = path.strip("/") if path else ""
+    
+    if share.subpath:
+        sub = share.subpath.strip("/")
+        full_path = f"{sub}/{req_path}".strip("/")
+    else:
+        full_path = req_path
+        
+    parts = [p for p in full_path.split("/") if p]
     
     base_q = db.query(File).filter(File.mapped_root_id == root.id)
     root_logical = root.logical_name
     
-    if path_clean:
-        prefix = root_logical.rstrip("/") + "/" + path_clean + "/"
+    if full_path:
+        prefix = root_logical.rstrip("/") + "/" + full_path + "/"
     else:
         prefix = root_logical.rstrip("/") + "/"
         
@@ -258,7 +285,7 @@ def browse_share(
         items.append({
             "name": fname,
             "type": "folder",
-            "path": f"{path_clean.rstrip('/')}/{fname}".strip("/"),
+            "path": f"{req_path.rstrip('/')}/{fname}".strip("/"),
             "item_count": info["count"],
             "total_size": info["total_size"],
         })
@@ -296,7 +323,8 @@ def browse_share(
     folder_items.sort(key=key_fn, reverse=reverse)
     file_items.sort(key=key_fn, reverse=reverse)
     
-    parent = "/".join(parts[:-1]) if len(parts) > 1 else ""
+    req_parts = [p for p in req_path.split("/") if p]
+    parent = "/".join(req_parts[:-1]) if len(req_parts) > 1 else ""
     
     def _build_breadcrumbs(parts: list[str]):
         crumbs = []
@@ -309,9 +337,9 @@ def browse_share(
         
     return {
         "items": folder_items + file_items,
-        "current_path": path_clean,
-        "parent_path": parent if path_clean else None,
-        "breadcrumbs": _build_breadcrumbs(parts),
+        "current_path": req_path,
+        "parent_path": parent if req_path else None,
+        "breadcrumbs": _build_breadcrumbs(req_parts),
         "root_id": root.id,
         "root_name": root.logical_name,
         "node_id": root.node.node_id if root.node else None,

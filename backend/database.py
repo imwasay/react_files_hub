@@ -63,6 +63,13 @@ def init_db():
     from sqlalchemy import text
     try:
         with get_db() as db:
+            db.execute(text("ALTER TABLE shares ADD COLUMN subpath VARCHAR"))
+            db.commit()
+    except Exception:
+        pass
+
+    try:
+        with get_db() as db:
             # ── Migration: drop old broken external-content FTS5 table ────────
             # The old schema used `content=files` which is an external-content
             # table. The `files` table lacks file_id/relative_path/extracted_text
